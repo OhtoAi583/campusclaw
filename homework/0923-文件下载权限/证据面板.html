@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>CampusClaw 文件下载权限 · 实测证据</title>
+<style>
+  :root { --brand:#9c1f24; --ok:#1a7f37; --bad:#b42318; --line:#e3ddd7; }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:1.4rem; font-family:-apple-system,'PingFang SC',system-ui,sans-serif; background:#f7f5f2; color:#1f1c1b; }
+  h1 { font-size:1.3rem; margin:0 0 .2rem; color:var(--brand); }
+  .sub { color:#6f6a67; font-size:.85rem; margin:0 0 1rem; }
+  .bar { background:#fff; border:1px solid var(--line); border-radius:12px; padding:.8rem 1rem; display:flex; gap:.6rem; align-items:center; flex-wrap:wrap; margin-bottom:1rem; }
+  input { font:inherit; padding:.45rem .6rem; border:1px solid var(--line); border-radius:8px; }
+  button { font:inherit; padding:.45rem .9rem; border-radius:8px; border:1px solid var(--line); background:#fff; cursor:pointer; }
+  button.primary { background:var(--brand); border-color:var(--brand); color:#fff; }
+  .who { margin-left:auto; font-size:.85rem; color:#6f6a67; }
+  table { width:100%; border-collapse:collapse; background:#fff; border:1px solid var(--line); border-radius:12px; overflow:hidden; }
+  th,td { border-bottom:1px solid var(--line); padding:.6rem .7rem; text-align:left; vertical-align:top; font-size:.86rem; }
+  th { background:#faf8f6; font-weight:600; }
+  .code { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.8rem; word-break:break-all; }
+  .status { font-weight:700; font-size:1rem; }
+  .s2xx { color:var(--ok); } .s4xx { color:var(--bad); }
+  .verdict-ok { color:var(--ok); font-weight:600; } .verdict-bad { color:var(--bad); font-weight:600; }
+  .note { margin-top:1rem; font-size:.8rem; color:#6f6a67; }
+</style>
+</head>
+<body>
+  <h1>CampusClaw · 文件下载是否需要权限（实测证据）</h1>
+  <p class="sub">本页在浏览器里对真实接口发起请求，下面显示的状态码与响应体是本次请求的真实返回，未做任何改写。</p>
+
+  <div class="bar">
+    <input id="u" placeholder="账号" value="student_a1" />
+    <input id="p" type="password" placeholder="口令" />
+    <button class="primary" onclick="login()">登录</button>
+    <button onclick="logout()">登出（回到未登录）</button>
+    <button onclick="run()">重新执行全部用例</button>
+    <span class="who" id="who">当前身份：未登录</span>
+  </div>
+
+  <table>
+    <thead>
+      <tr><th style="width:31%">用例（浏览器实际发出的请求）</th><th style="width:9%">状态码</th><th style="width:33%">响应体</th><th style="width:27%">是否拿到文件正文</th></tr>
+    </thead>
+    <tbody id="rows"></tbody>
+  </table>
+  <p class="note">说明：状态码 2xx 表示请求成功；4xx 表示服务端拒绝。文件类用例额外检查响应体中是否出现材料正文关键字（A班 / B班），用于判断"是否真的拿到了文件内容"。</p>
+
+<script>
+const CASES = [
+  { key:'anon-list',        label:'未登录 → 请求材料列表',                 url:'/api/materials',              expect:'拒绝' },
+  { key:'anon-file',        label:'未登录 → 请求文件下载接口',             url:'/api/materials/1/file',       expect:'拒绝', file:true },
+  { key:'anon-static',      label:'未登录 → 直接访问上传目录静态路径',     url:'/uploads/seed-a-class-reading.md', expect:'拒绝', file:true },
+  { key:'own-file',         label:'本班学生 → 下载本班材料文件',           url:'/api/materials/1/file',       expect:'允许', file:true },
+  { key:'cross-detail',     label:'本班学生 → 访问 B 班材料详情',          url:'/api/materials/2',            expect:'拒绝', file:true },
+  { key:'cross-file',       label:'本班学生 → 下载 B 班材料文件',          url:'/api/materials/2/file',       expect:'拒绝', file:true },
+  { key:'missing-file',     label:'本班学生 → 下载不存在的材料 ID',        url:'/api/materials/999/file',     expect:'拒绝', file:true },
+];
+
+async function identity() {
+  try {
+    const res = await fetch('/api/me', { credentials: 'same-origin' });
+    if (!res.ok) return '未登录';
+    const me = await res.json();
+    return `${me.username}（${me.role === 'teacher' ? '教师' : '学生'}，${me.class_name} 班）`;
+  } catch { return '未登录'; }
+}
+
+async function refreshWho() {
+  document.getElementById('who').textContent = '当前身份：' + await identity();
+}
+
+async function login() {
+  await fetch('/api/logout', { method: 'POST', credentials: 'same-origin' }).catch(() => {});
+  const res = await fetch('/api/login', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: document.getElementById('u').value, password: document.getElementById('p').value }),
+  });
+  if (!res.ok) alert('登录失败（' + res.status + '）');
+  await run();
+}
+
+async function logout() {
+  await fetch('/api/logout', { method: 'POST', credentials: 'same-origin' }).catch(() => {});
+  await run();
+}
+
+async function run() {
+  await refreshWho();
+  const tbody = document.getElementById('rows');
+  tbody.innerHTML = '';
+  for (const c of CASES) {
+    const tr = document.createElement('tr');
+    const tdLabel = document.createElement('td');
+    tdLabel.className = 'code';
+    tdLabel.textContent = 'GET ' + c.url;
+    tr.appendChild(tdLabel);
+
+    const tdStatus = document.createElement('td');
+    const tdBody = document.createElement('td');
+    tdBody.className = 'code';
+    const tdFile = document.createElement('td');
+    tr.appendChild(tdStatus); tr.appendChild(tdBody); tr.appendChild(tdFile);
+
+    try {
+      const res = await fetch(c.url, { credentials: 'same-origin' });
+      const text = await res.text();
+      const status = res.status;
+      tdStatus.textContent = status + (status >= 400 ? ' 拒绝' : ' 成功');
+      tdStatus.className = 'status ' + (status >= 400 ? 's4xx' : 's2xx');
+      tdBody.textContent = text.length > 220 ? text.slice(0, 220) + '…' : text;
+
+      if (c.file) {
+        const leaked = /A班|B班|教学设计|课堂练习/.test(text);
+        tdFile.innerHTML = leaked
+          ? '<span class="verdict-bad">拿到正文（' + text.length + ' 字节）</span>'
+          : '<span class="verdict-ok">未拿到文件正文</span>';
+      } else {
+        tdFile.textContent = '—';
+      }
+    } catch (e) {
+      tdStatus.textContent = '请求失败';
+      tdBody.textContent = String(e);
+    }
+    tbody.appendChild(tr);
+  }
+}
+
+run();
+</script>
+</body>
+</html>

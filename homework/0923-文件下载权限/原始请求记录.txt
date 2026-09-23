@@ -1,0 +1,157 @@
+# 原始请求记录（curl 实测，2026-09-23 11:49:29 本机时间）
+# 目标站点：http://127.0.0.1:8088（Nginx → Go ；Go → MySQL）
+
+############ 一、未登录（浏览器不带任何 Cookie） ############
+
+$ curl -i http://127.0.0.1:8088/api/materials
+HTTP/1.1 401 Unauthorized
+Server: nginx/1.31.6
+Date: Wed, 23 Sep 2026 03:49:29 GMT
+Content-Type: application/json; charset=utf-8
+Content-Length: 25
+Connection: keep-alive
+Referrer-Policy: same-origin
+X-Content-Type-Options: nosniff
+X-Frame-Options: DENY
+
+{"error":"unauthorized"}
+
+$ curl -i http://127.0.0.1:8088/api/materials/1/file
+HTTP/1.1 401 Unauthorized
+Server: nginx/1.31.6
+Date: Wed, 23 Sep 2026 03:49:29 GMT
+Content-Type: application/json; charset=utf-8
+Content-Length: 25
+Connection: keep-alive
+Referrer-Policy: same-origin
+X-Content-Type-Options: nosniff
+X-Frame-Options: DENY
+
+{"error":"unauthorized"}
+
+$ curl -i http://127.0.0.1:8088/uploads/seed-a-class-reading.md
+HTTP/1.1 404 Not Found
+Server: nginx/1.31.6
+Date: Wed, 23 Sep 2026 03:49:29 GMT
+Content-Type: text/html
+Content-Length: 153
+Connection: keep-alive
+
+<html>
+<head><title>404 Not Found</title></head>
+<body>
+<center><h1>404 Not Found</h1></center>
+<hr><center>nginx/1.31.6</center>
+</body>
+</html>
+
+############ 二、以学生 student_a1（A 班）登录 ############
+
+$ curl -i -c /tmp/a.jar -X POST http://127.0.0.1:8088/api/login -H "Content-Type: application/json" -d "{\"username\":\"student_a1\",\"password\":\"<预置口令>\"}"
+HTTP/1.1 200 OK
+Server: nginx/1.31.6
+date: <略>
+Content-Type: application/json; charset=utf-8
+Content-Length: 85
+Connection: keep-alive
+Referrer-Policy: same-origin
+Set-Cookie: campusclaw_session=X5bAUdahH9d5gcRqxTdC1DqAWYkOJcZRPIq3Cv6NwHc; Path=/; Max-Age=230400; HttpOnly; SameSite=Lax
+X-Content-Type-Options: nosniff
+X-Frame-Options: DENY
+
+{"user_id":2,"username":"student_a1","role":"student","class_id":1,"class_name":"A"}
+
+############ 三、学生下载【本班】材料（应允许） ############
+
+$ curl -i -b /tmp/a.jar http://127.0.0.1:8088/api/materials/1/file
+HTTP/1.1 200 OK
+Server: nginx/1.31.6
+Date: Wed, 23 Sep 2026 03:49:29 GMT
+Content-Type: text/markdown; charset=utf-8
+Content-Length: 350
+Connection: keep-alive
+Content-Disposition: attachment; filename*=utf-8''A%E7%8F%AD-%E8%AF%AD%E6%96%87%E9%98%85%E8%AF%BB%E8%AF%BE%E6%95%99%E5%AD%A6%E8%AE%BE%E8%AE%A1.md
+Referrer-Policy: same-origin
+X-Content-Type-Options: nosniff
+X-Frame-Options: DENY
+
+# A班 语文阅读课教学设计
+
+## 目标
+
+- 训练概括能力
+- 积累语言材料
+
+## 课堂流程
+
+| 环节 | 时长 | 说明 |
+| --- | --- | --- |
+| 导入 | 5 分钟 | 由情境入题 |
+| 精读 | 20 分钟 | 抓关键句 |
+| 迁移 | 10 分钟 | 仿写练习 |
+
+> 本条目由种子数据写入，属于 A 班，B 班账号不应读到。
+
+############ 四、学生下载【其他班级】材料（应拒绝） ############
+
+$ curl -i -b /tmp/a.jar http://127.0.0.1:8088/api/materials/2
+HTTP/1.1 404 Not Found
+Server: nginx/1.31.6
+Date: Wed, 23 Sep 2026 03:49:29 GMT
+Content-Type: application/json; charset=utf-8
+Content-Length: 22
+Connection: keep-alive
+Referrer-Policy: same-origin
+X-Content-Type-Options: nosniff
+X-Frame-Options: DENY
+
+{"error":"not_found"}
+
+$ curl -i -b /tmp/a.jar http://127.0.0.1:8088/api/materials/2/file
+HTTP/1.1 404 Not Found
+Server: nginx/1.31.6
+Date: Wed, 23 Sep 2026 03:49:29 GMT
+Content-Type: application/json; charset=utf-8
+Content-Length: 22
+Connection: keep-alive
+Referrer-Policy: same-origin
+X-Content-Type-Options: nosniff
+X-Frame-Options: DENY
+
+{"error":"not_found"}
+
+############ 五、对照：不存在的材料 ID（与跨班必须同形） ############
+
+$ curl -i -b /tmp/a.jar http://127.0.0.1:8088/api/materials/999/file
+HTTP/1.1 404 Not Found
+Server: nginx/1.31.6
+Date: Wed, 23 Sep 2026 03:49:29 GMT
+Content-Type: application/json; charset=utf-8
+Content-Length: 22
+Connection: keep-alive
+Referrer-Policy: same-origin
+X-Content-Type-Options: nosniff
+X-Frame-Options: DENY
+
+{"error":"not_found"}
+
+############ 六、学生尝试上传（越权，应 403） ############
+
+$ curl -i -b /tmp/a.jar -X POST http://127.0.0.1:8088/api/materials -F "file=@/tmp/demo.md"
+HTTP/1.1 403 Forbidden
+Server: nginx/1.31.6
+Date: Wed, 23 Sep 2026 03:49:29 GMT
+Content-Type: application/json; charset=utf-8
+Content-Length: 22
+Connection: keep-alive
+Referrer-Policy: same-origin
+X-Content-Type-Options: nosniff
+X-Frame-Options: DENY
+
+{"error":"forbidden"}
+
+############ 七、跨班与不存在的响应体对比（应逐字节一致） ############
+
+跨班响应体  : {"error":"not_found"}
+不存在响应体: {"error":"not_found"}
+对比结果：完全一致 ✔

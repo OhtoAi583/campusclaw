@@ -1,0 +1,12 @@
+# web 镜像的构建上下文是仓库根，这里排除运行期数据与无关目录。
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+**/node_modules
+frontend/dist
+backend/uploads
+docs
+scripts
+*.log

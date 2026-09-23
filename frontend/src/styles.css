@@ -1,0 +1,423 @@
+/* 统一品牌色与深浅色主题。体验条目虽然可选，但一旦写进规约就要逐条可验收。 */
+:root {
+  --brand: #9c1f24;
+  --brand-strong: #7a1418;
+  --bg: #f7f5f2;
+  --panel: #ffffff;
+  --text: #1f1c1b;
+  --muted: #6f6a67;
+  --border: #e3ddd7;
+  --danger: #b42318;
+}
+
+:root[data-theme='dark'] {
+  --brand: #e4595f;
+  --brand-strong: #f2838a;
+  --bg: #17151a;
+  --panel: #221f26;
+  --text: #f3f0ee;
+  --muted: #a8a1a0;
+  --border: #35313a;
+  --danger: #ff8a80;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+}
+
+a {
+  color: var(--brand);
+  text-decoration: none;
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  padding: 0.45rem 0.9rem;
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+button.primary {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: #fff;
+}
+
+button.primary:hover:not(:disabled) {
+  background: var(--brand-strong);
+}
+
+button.ghost {
+  background: transparent;
+}
+
+button.icon-button {
+  padding: 0.35rem 0.6rem;
+}
+
+.boot {
+  display: grid;
+  place-items: center;
+  height: 100vh;
+  color: var(--muted);
+}
+
+/* --- 登录页 --- */
+.login-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 1.5rem;
+}
+
+.login-card {
+  width: min(420px, 100%);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 1.75rem;
+  box-shadow: 0 18px 45px rgba(0, 0, 0, 0.08);
+}
+
+.login-card header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.login-card h1 {
+  font-size: 1.35rem;
+  margin: 1.1rem 0 0.35rem;
+}
+
+.login-card form {
+  display: grid;
+  gap: 0.9rem;
+  margin-top: 1.2rem;
+}
+
+.login-card label {
+  display: grid;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+input,
+select {
+  font: inherit;
+  padding: 0.55rem 0.7rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+}
+
+.brand-mark {
+  font-weight: 700;
+  color: var(--brand);
+  letter-spacing: 0.02em;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.small {
+  font-size: 0.82rem;
+}
+
+.form-error {
+  color: var(--danger);
+  font-size: 0.88rem;
+  margin: 0;
+}
+
+/* --- 应用外壳 --- */
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.9rem 1.5rem;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  flex-wrap: wrap;
+}
+
+.brand {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+}
+
+.brand-sub {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.identity {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.content {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 1.5rem;
+}
+
+.toolbar {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  margin-bottom: 1.2rem;
+  flex-wrap: wrap;
+}
+
+.search {
+  flex: 1 1 260px;
+}
+
+.view-toggle {
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.view-toggle button {
+  border: 0;
+  border-radius: 0;
+}
+
+.view-toggle button.active {
+  background: var(--brand);
+  color: #fff;
+}
+
+/* --- 材料列表 --- */
+.materials {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.materials-grid {
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+}
+
+.material-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.9rem 1rem;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.material-title {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.material-title:hover {
+  color: var(--brand);
+}
+
+.material-card p {
+  margin: 0.35rem 0 0;
+}
+
+.material-actions {
+  display: flex;
+  gap: 0.4rem;
+}
+
+/* --- 详情页 --- */
+.detail {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 1.5rem;
+}
+
+.detail h1 {
+  margin-top: 0;
+}
+
+.markdown {
+  margin-top: 1.4rem;
+  line-height: 1.7;
+}
+
+.markdown pre {
+  overflow: auto;
+  padding: 0.8rem;
+  background: var(--bg);
+  border-radius: 8px;
+}
+
+.markdown table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.markdown th,
+.markdown td {
+  border: 1px solid var(--border);
+  padding: 0.4rem 0.6rem;
+  text-align: left;
+}
+
+/* --- 浮层 --- */
+.palette-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  display: grid;
+  place-items: start center;
+  padding-top: 12vh;
+  z-index: 20;
+}
+
+.palette,
+.dialog {
+  width: min(560px, 92vw);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 1rem;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+}
+
+.palette input {
+  width: 100%;
+}
+
+.palette ul {
+  list-style: none;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  max-height: 320px;
+  overflow: auto;
+}
+
+.palette li button {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  border: 0;
+  background: transparent;
+  text-align: left;
+}
+
+.palette li button:hover {
+  background: var(--bg);
+}
+
+.palette-empty {
+  color: var(--muted);
+  padding: 0.5rem;
+}
+
+.progress {
+  position: relative;
+  margin-top: 1rem;
+  height: 22px;
+  border-radius: 999px;
+  background: var(--bg);
+  overflow: hidden;
+}
+
+.progress-bar {
+  height: 100%;
+  background: var(--brand);
+  transition: width 0.2s ease;
+}
+
+.progress span {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 0.75rem;
+  color: #fff;
+  mix-blend-mode: difference;
+}
+
+.toast-stack {
+  position: fixed;
+  right: 1.2rem;
+  bottom: 1.2rem;
+  display: grid;
+  gap: 0.5rem;
+  z-index: 30;
+}
+
+.toast {
+  padding: 0.6rem 0.9rem;
+  border-radius: 10px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
+  font-size: 0.9rem;
+}
+
+.toast-success {
+  border-color: var(--brand);
+}
+
+.toast-error {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+/* --- 响应式 --- */
+@media (max-width: 640px) {
+  .content {
+    padding: 1rem;
+  }
+
+  .topbar {
+    padding: 0.75rem 1rem;
+  }
+
+  .material-card {
+    flex-direction: column;
+  }
+
+  .materials-grid {
+    grid-template-columns: 1fr;
+  }
+}

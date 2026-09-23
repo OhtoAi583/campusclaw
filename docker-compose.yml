@@ -1,0 +1,68 @@
+# 标准启动方式只有这一种：cp .env.example .env → 填写必填项 → docker compose up --build -d
+# 只有 web 映射宿主端口；db 与 api 都只在 Compose 内部网络可达。
+name: campusclaw
+
+services:
+  db:
+    image: mysql:8.0
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    environment:
+      # 管理员口令只用于容器初始化；api 用的是下面这个普通账号。
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?请在 .env 中设置}
+      MYSQL_DATABASE: ${DB_NAME:?请在 .env 中设置}
+      MYSQL_USER: ${DB_USER:?请在 .env 中设置}
+      MYSQL_PASSWORD: ${DB_PASSWORD:?请在 .env 中设置}
+    volumes:
+      - db-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+    restart: unless-stopped
+
+  api:
+    build:
+      context: ./backend
+    environment:
+      APP_PORT: "8080"
+      SESSION_SECRET: ${SESSION_SECRET:?请在 .env 中设置}
+      SESSION_TTL_HOURS: ${SESSION_TTL_HOURS:-8}
+      DB_HOST: ${DB_HOST:-db}
+      DB_PORT: ${DB_PORT:-3306}
+      DB_NAME: ${DB_NAME:?请在 .env 中设置}
+      DB_USER: ${DB_USER:?请在 .env 中设置}
+      DB_PASSWORD: ${DB_PASSWORD:?请在 .env 中设置}
+      UPLOAD_DIR: ${UPLOAD_DIR:-/data/uploads}
+      MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-2097152}
+      LOGIN_MAX_ATTEMPTS: ${LOGIN_MAX_ATTEMPTS:-5}
+      LOGIN_WINDOW_MINUTES: ${LOGIN_WINDOW_MINUTES:-15}
+      LOGIN_LOCK_MINUTES: ${LOGIN_LOCK_MINUTES:-15}
+      SEED_TEACHER_A_PASSWORD: ${SEED_TEACHER_A_PASSWORD:?请在 .env 中设置}
+      SEED_STUDENT_A1_PASSWORD: ${SEED_STUDENT_A1_PASSWORD:?请在 .env 中设置}
+      SEED_STUDENT_B1_PASSWORD: ${SEED_STUDENT_B1_PASSWORD:?请在 .env 中设置}
+    volumes:
+      # 上传目录只挂给 api；Nginx 不把它当静态目录。
+      - uploads:/data/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    ports:
+      # 唯一对外暴露的端口。
+      - "${APP_PORT:-8080}:80"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  db-data:
+  uploads:

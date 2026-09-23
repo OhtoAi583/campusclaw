@@ -1,0 +1,8 @@
+# 密钥与运行期数据一律不进镜像。
+.env
+.env.*
+!.env.example
+uploads/
+data/
+*.log
+coverage.out
