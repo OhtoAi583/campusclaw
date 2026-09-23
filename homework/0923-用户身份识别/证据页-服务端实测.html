@@ -1,0 +1,51 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
+<title>用户身份识别 · 服务端实测</title><style>
+body{margin:0;padding:24px;font-family:-apple-system,'PingFang SC',system-ui,sans-serif;background:#f7f5f2;color:#1f1c1b}
+h1{font-size:20px;color:#9c1f24;margin:0 0 4px} .sub{color:#6f6a67;font-size:13px;margin:0 0 18px}
+h2{font-size:15px;margin:18px 0 6px} pre{background:#1f1c1b;color:#f3f0ee;border-radius:10px;padding:12px 14px;font-size:12.5px;overflow:auto;font-family:ui-monospace,Menlo,monospace;line-height:1.55}
+</style></head><body>
+<h1>服务端如何用这个标识换回用户身份</h1>
+<p class="sub">数据来源：本机实测命令输出（curl + mysql + openssl），未做改写。</p>
+<h2>① 登录响应头：Set-Cookie</h2><pre>===== 1) 登录：响应头 Set-Cookie =====
+HTTP/1.1 200 OK
+Server: nginx/1.31.6
+Date: Wed, 23 Sep 2026 03:59:20 GMT
+Content-Type: application/json; charset=utf-8
+Content-Length: 85
+Connection: keep-alive
+Referrer-Policy: same-origin
+Set-Cookie: campusclaw_session=_YYayaJ-lzdeW2Q4fFyrZ7l_K_w7ZlSwYDn1gLu7BPU; Path=/; Max-Age=230400; HttpOnly; SameSite=Lax
+X-Content-Type-Options: nosniff
+X-Frame-Options: DENY
+
+{&quot;user_id&quot;:2,&quot;username&quot;:&quot;student_a1&quot;,&quot;role&quot;:&quot;student&quot;,&quot;class_id&quot;:1,&quot;class_name&quot;:&quot;A&quot;}</pre>
+<h2>② 浏览器拿到的会话标识</h2><pre>===== 2) 浏览器拿到的会话标识（不透明随机串）=====
+token = _YYayaJ-lzdeW2Q4fFyrZ7l_K_w7ZlSwYDn1gLu7BPU</pre>
+<h2>③ 服务端 sessions 表里保存的内容</h2><pre>===== 3) 服务端 sessions 表里存的是什么 =====
+sessions_id	user_id	created_at	expires_at
+0185459de425bfb206e347b54351e24bc07de7a71e64bbf72a2c9cd7a455c7b0	2	2026-09-23 03:59:20	2026-09-25 19:59:21
+ccbb53cca0d89360b4ece5f90acb6241910d38b45967f7f159d30727fde95fb1	1	2026-09-23 03:57:39	2026-09-25 19:57:40
+30c86b48474c563e2e43e2abdd72aa044de644ed03c1cb7b80a76c6eb7dba7f3	1	2026-09-23 03:53:06	2026-09-25 19:53:06</pre>
+<h2>④ 校验：库里那行 = HMAC-SHA256(SESSION_SECRET, token)</h2><pre>===== 4) 验证：库里这行 = HMAC-SHA256(SESSION_SECRET, token) =====
+计算出的 HMAC = 0185459de425bfb206e347b54351e24bc07de7a71e64bbf72a2c9cd7a455c7b0
+库中的     id = 0185459de425bfb206e347b54351e24bc07de7a71e64bbf72a2c9cd7a455c7b0
+结论：库中保存的是 token 的 HMAC，不是 token 本身 ✔</pre>
+<h2>⑤ 凭 Cookie 换回身份，并按会话班级取材料</h2><pre>===== 5) 后续请求靠 Cookie 里的 token 换回身份 =====
+$ curl -i -b &quot;&lt;cookie jar&gt;&quot; /api/me
+HTTP/1.1 200 OK
+Server: nginx/1.31.6
+Date: Wed, 23 Sep 2026 03:59:20 GMT
+Content-Type: application/json; charset=utf-8
+Content-Length: 85
+Connection: keep-alive
+Referrer-Policy: same-origin
+X-Content-Type-Options: nosniff
+X-Frame-Options: DENY
+
+{&quot;user_id&quot;:2,&quot;username&quot;:&quot;student_a1&quot;,&quot;role&quot;:&quot;student&quot;,&quot;class_id&quot;:1,&quot;class_name&quot;:&quot;A&quot;}
+
+$ curl -i -b &quot;&lt;cookie jar&gt;&quot; /api/materials
+返回的 class_id = 1
+材料所属班级 = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+材料标题 = [&#x27;size&#x27;, &#x27;ws&#x27;, &#x27;cn&#x27;, &#x27;xss&#x27;, &#x27;upper&#x27;, &#x27;upper&#x27;, &#x27;upper&#x27;, &#x27;upper&#x27;, &#x27;sample&#x27;, &#x27;sample&#x27;, &#x27;double.txt&#x27;, &#x27;double.md&#x27;, &#x27;campusclaw-upload.gl4qQ7fuhf&#x27;, &#x27;belong&#x27;, &#x27;evil&#x27;, &#x27;belong&#x27;, &#x27;A班·教研材料示例：语文阅读课教学设计&#x27;]</pre>
+</body></html>

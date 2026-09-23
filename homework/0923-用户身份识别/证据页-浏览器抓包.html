@@ -1,0 +1,24 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
+<title>用户身份识别 · 浏览器抓包实测</title><style>
+body{margin:0;padding:24px;font-family:-apple-system,'PingFang SC',system-ui,sans-serif;background:#f7f5f2;color:#1f1c1b}
+h1{font-size:20px;color:#9c1f24;margin:0 0 4px} .sub{color:#6f6a67;font-size:13px;margin:0 0 18px}
+h2{font-size:15px;margin:20px 0 8px} .case{background:#fff;border:1px solid #e3ddd7;border-radius:10px;padding:12px 14px;margin-bottom:10px}
+.case-head{font-family:ui-monospace,Menlo,monospace;font-size:13px;margin-bottom:8px}
+.method{background:#9c1f24;color:#fff;border-radius:5px;padding:1px 7px;font-weight:600}
+.url{margin-left:6px} .kv{display:flex;gap:10px;font-family:ui-monospace,Menlo,monospace;font-size:12.5px;padding:4px 0;border-top:1px dashed #eee}
+.k{flex:0 0 150px;color:#6f6a67} .v{word-break:break-all} .note{font-size:12px;color:#6f6a67;margin-top:14px}
+</style></head><body>
+<h1>登录成功后，后续请求如何携带并识别用户标识</h1>
+<p class="sub">数据来源：Chrome DevTools Protocol 从真实浏览器会话抓取的网络日志（Network.requestWillBeSentExtraInfo / responseReceivedExtraInfo），未做改写。</p>
+<h2>① 登录请求：服务端把会话标识放进 Set-Cookie</h2><div class="case">
+  <div class="case-head"><span class="method">POST</span> <span class="url">http://127.0.0.1:8088/api/login</span></div>
+  <div class="kv"><span class="k">请求头 Cookie</span><span class="v">（无）</span></div>
+  <div class="kv"><span class="k">响应头 Set-Cookie</span><span class="v">campusclaw_session=QqLOUhqtrfJfY3wGa4dLTJCTzlqGd90wwq4JLeuztuY; Path=/; Max-Age=230400; HttpOnly; SameSite=Lax</span></div>
+</div>
+<h2>② 之后获取本班材料：浏览器自动带上 Cookie</h2><div class="case">
+  <div class="case-head"><span class="method">GET</span> <span class="url">http://127.0.0.1:8088/api/materials</span></div>
+  <div class="kv"><span class="k">请求头 Cookie</span><span class="v">campusclaw_session=QqLOUhqtrfJfY3wGa4dLTJCTzlqGd90wwq4JLeuztuY</span></div>
+  <div class="kv"><span class="k">响应头 Set-Cookie</span><span class="v">（无）</span></div>
+</div>
+<p class="note">可以看到：登录响应通过 <b>Set-Cookie</b> 下发 <code>campusclaw_session</code>（HttpOnly，脚本读不到）；随后 <b>GET /api/materials</b> 的请求头里自动携带同一个 Cookie——浏览器没有任何 JavaScript 代码去读取或拼接这个标识。</p>
+</body></html>

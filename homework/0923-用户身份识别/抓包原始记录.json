@@ -1,0 +1,94 @@
+[
+  {
+    "method": "GET",
+    "url": "http://127.0.0.1:8088/api/me",
+    "requestHeaders": {
+      "Accept": "*/*",
+      "Accept-Encoding": "gzip, deflate, br, zstd",
+      "Accept-Language": "zh-CN",
+      "Connection": "keep-alive",
+      "Host": "127.0.0.1:8088",
+      "Referer": "http://127.0.0.1:8088/",
+      "Sec-Fetch-Dest": "empty",
+      "Sec-Fetch-Mode": "cors",
+      "Sec-Fetch-Site": "same-origin",
+      "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.0.0 Safari/537.36",
+      "sec-ch-ua": "\"Google Chrome\";v=\"153\", \"Not_A Brand\";v=\"8\", \"Chromium\";v=\"153\"",
+      "sec-ch-ua-mobile": "?0",
+      "sec-ch-ua-platform": "\"macOS\""
+    },
+    "responseHeaders": {
+      "Connection": "keep-alive",
+      "Content-Length": "25",
+      "Content-Type": "application/json; charset=utf-8",
+      "Date": "Wed, 23 Sep 2026 03:59:36 GMT",
+      "Referrer-Policy": "same-origin",
+      "Server": "nginx/1.31.6",
+      "X-Content-Type-Options": "nosniff",
+      "X-Frame-Options": "DENY"
+    }
+  },
+  {
+    "method": "POST",
+    "url": "http://127.0.0.1:8088/api/login",
+    "requestHeaders": {
+      "Accept": "*/*",
+      "Accept-Encoding": "gzip, deflate, br, zstd",
+      "Accept-Language": "zh-CN",
+      "Connection": "keep-alive",
+      "Content-Length": "59",
+      "Content-Type": "application/json",
+      "Host": "127.0.0.1:8088",
+      "Origin": "http://127.0.0.1:8088",
+      "Referer": "http://127.0.0.1:8088/login",
+      "Sec-Fetch-Dest": "empty",
+      "Sec-Fetch-Mode": "cors",
+      "Sec-Fetch-Site": "same-origin",
+      "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.0.0 Safari/537.36",
+      "sec-ch-ua": "\"Google Chrome\";v=\"153\", \"Not_A Brand\";v=\"8\", \"Chromium\";v=\"153\"",
+      "sec-ch-ua-mobile": "?0",
+      "sec-ch-ua-platform": "\"macOS\""
+    },
+    "responseHeaders": {
+      "Connection": "keep-alive",
+      "Content-Length": "85",
+      "Content-Type": "application/json; charset=utf-8",
+      "Date": "Wed, 23 Sep 2026 03:59:37 GMT",
+      "Referrer-Policy": "same-origin",
+      "Server": "nginx/1.31.6",
+      "Set-Cookie": "campusclaw_session=QqLOUhqtrfJfY3wGa4dLTJCTzlqGd90wwq4JLeuztuY; Path=/; Max-Age=230400; HttpOnly; SameSite=Lax",
+      "X-Content-Type-Options": "nosniff",
+      "X-Frame-Options": "DENY"
+    }
+  },
+  {
+    "method": "GET",
+    "url": "http://127.0.0.1:8088/api/materials",
+    "requestHeaders": {
+      "Accept": "*/*",
+      "Accept-Encoding": "gzip, deflate, br, zstd",
+      "Accept-Language": "zh-CN",
+      "Connection": "keep-alive",
+      "Cookie": "campusclaw_session=QqLOUhqtrfJfY3wGa4dLTJCTzlqGd90wwq4JLeuztuY",
+      "Host": "127.0.0.1:8088",
+      "Referer": "http://127.0.0.1:8088/",
+      "Sec-Fetch-Dest": "empty",
+      "Sec-Fetch-Mode": "cors",
+      "Sec-Fetch-Site": "same-origin",
+      "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.0.0 Safari/537.36",
+      "sec-ch-ua": "\"Google Chrome\";v=\"153\", \"Not_A Brand\";v=\"8\", \"Chromium\";v=\"153\"",
+      "sec-ch-ua-mobile": "?0",
+      "sec-ch-ua-platform": "\"macOS\""
+    },
+    "responseHeaders": {
+      "Connection": "keep-alive",
+      "Content-Length": "303",
+      "Content-Type": "application/json; charset=utf-8",
+      "Date": "Wed, 23 Sep 2026 03:59:37 GMT",
+      "Referrer-Policy": "same-origin",
+      "Server": "nginx/1.31.6",
+      "X-Content-Type-Options": "nosniff",
+      "X-Frame-Options": "DENY"
+    }
+  }
+]
