@@ -48,6 +48,74 @@ homework/    0923 作业：文件下载权限的分析与截图证据
 scripts/     本地验证脚本
 ```
 
+## 知识库检索（迭代 2）
+
+在本班范围内按内容检索材料正文，并给出可核对的来源。
+
+```bash
+curl -s -b cookie.jar -X POST http://localhost:8080/api/search \
+  -H 'Content-Type: application/json' \
+  -d '{"query":"导入环节的设计意图","top_k":5}'
+```
+
+```json
+{
+  "query": "导入环节的设计意图",
+  "class_id": 1,
+  "count": 1,
+  "items": [
+    {
+      "material_id": 23,
+      "material_title": "A班·教研材料示例：语文阅读课教学设计",
+      "original_name": "A班-语文阅读课教学设计.md",
+      "chunk_index": 1,
+      "start_offset": 320,
+      "end_offset": 588,
+      "content": "## 导入环节的设计意图……",
+      "score": 0.324
+    }
+  ]
+}
+```
+
+**检索范围**：固定为会话所在班级（`class_id` 只来自服务端会话，请求里的 `class_id` 一律忽略）。
+跨班内容不进入候选集，因此不存在"跨班结果"这一分支。
+
+**内容溯源**：每条结果都能指回具体材料与具体片段——`material_id` 用来调 `GET /api/materials/{id}`，
+`start_offset`/`end_offset` 是片段在正文中的字符区间，按该区间截取正文与结果里的 `content` **逐字符一致**。
+前端检索页点击结果会跳到详情页并高亮该片段。结果中不含存储名与磁盘路径，下载仍走鉴权接口。
+
+**失败语义**：未登录 401；空查询 / 超长查询 / `top_k` 越界 400；
+查询合法但没有超过阈值的匹配 → 200 且 `items` 为空数组（不是 404）；超出超时 → 503，不返回部分结果。
+
+### 索引与重建
+
+材料上传时，`materials`、`knowledge_entries`、`kb_chunks` **在同一事务**写入，因此不会出现"材料在库里但检索不到"。
+服务启动时会为缺索引的历史材料自动补建。调整分块参数或向量维度后需要重建：
+
+```bash
+docker compose exec api /app/server      # 正常启动即可自动补建缺失索引
+./bin/reindex                            # 全量幂等重建（本机运行）
+```
+
+改过 `EMBEDDING_DIM` 却没有重建时，服务会**拒绝启动**并提示先重建索引。
+
+### 已知限制
+
+本迭代的嵌入是**词形层面**的：对片段做字符 n-gram 分词后用哈希技巧映射到固定维度（`EMBEDDING_DIM`），
+再做 L2 归一化，检索用余弦相似度。它能稳定命中"用词相近"的内容，但**不具备真正的语义泛化**
+（例如同义改写、跨语言检索会明显变弱）。嵌入做成 `Embedder` 接口，后续迭代可以换成真实语义模型而不改上层逻辑。
+
+### 检索评测
+
+```bash
+STUDENT_A_PW=... STUDENT_B_PW=... TEACHER_PW=... \
+  BASE_URL=http://localhost:8080 ./scripts/eval-retrieval.sh
+```
+
+评测集在 `eval/retrieval-cases.json`：`hit` 用例判定命中率（阈值 80%），
+`isolation` 用例判定班级隔离——**隔离用例必须全部返回空**，出现跨班结果即判定本次交付不通过。
+
 ## 接口一览
 
 | 方法 | 路径 | 鉴权 | 成功 | 失败 |
@@ -60,6 +128,7 @@ scripts/     本地验证脚本
 | POST | `/api/materials` | 教师 | 201 | 401 / 403 / 400 / 413 |
 | GET | `/api/materials/{id}` | 会话 | 200（本班） | 401 / 404 |
 | GET | `/api/materials/{id}/file` | 会话 | 200（附件） | 401 / 404 |
+| POST | `/api/search` | 会话 | 200（仅本班片段 + 溯源） | 401 / 400 / 503 |
 
 ## 快速开始（Docker Compose，标准启动方式）
 
@@ -128,4 +197,5 @@ cd frontend && npm run build       # TypeScript 类型检查 + 构建
 - `homework/0923-文件下载权限/作业-0923-文件下载是否需要权限.md`：文件下载权限的分析与截图证据
 - `docs/iteration-1.md`：迭代说明与四项设计决策（ADR）
 - `docs/evidence.md`：主路径与失败路径的验收证据
-- `openspec/`：本变更的 proposal / design / tasks / delta spec
+- `openspec/`：变更的 proposal / design / tasks / delta spec（迭代 1 已归档；迭代 2 为 `changes/add-class-scoped-retrieval/`）
+- `eval/retrieval-cases.json`：检索质量门禁用例

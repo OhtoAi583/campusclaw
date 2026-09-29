@@ -2,6 +2,7 @@
 package server
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -9,11 +10,13 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"time"
 
 	"campusclaw/backend/internal/auth"
 	"campusclaw/backend/internal/config"
 	"campusclaw/backend/internal/httpx"
 	"campusclaw/backend/internal/materials"
+	"campusclaw/backend/internal/search"
 )
 
 // Deps 是服务器需要的外部依赖。
@@ -24,6 +27,7 @@ type Deps struct {
 	Hasher    *auth.Hasher
 	Limiter   *auth.Limiter
 	Materials *materials.Handler
+	Search    *search.Service
 }
 
 type server struct {
@@ -49,6 +53,8 @@ func New(deps Deps) http.Handler {
 	// 上传是教师专属：先认证，再按会话角色授权（垂直权限）。
 	mux.Handle("POST /api/materials", httpx.RequireAuth(
 		httpx.RequireRole("teacher", http.HandlerFunc(deps.Materials.Upload)), deps.Sessions))
+	// 本班范围内的知识库检索：与列表、详情同一条班级边界，班级只取自会话。
+	mux.Handle("POST /api/search", httpx.RequireAuth(http.HandlerFunc(s.search), deps.Sessions))
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, http.StatusNotFound, "not_found")
@@ -173,6 +179,74 @@ func (s *server) me(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.JSON(w, http.StatusOK, toIdentity(session))
+}
+
+type searchRequest struct {
+	Query string `json:"query"`
+	TopK  int    `json:"top_k"`
+}
+
+type searchResponse struct {
+	Query   string          `json:"query"`
+	ClassID int64           `json:"class_id"`
+	Count   int             `json:"count"`
+	Items   []search.Result `json:"items"`
+}
+
+// search 执行本班检索。检索范围只来自会话：请求体里的 class_id 既不解析也不采信。
+func (s *server) search(w http.ResponseWriter, r *http.Request) {
+	session, ok := httpx.SessionFrom(r.Context())
+	if !ok {
+		httpx.Fail(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	var req searchRequest
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<10))
+	if err := decoder.Decode(&req); err != nil {
+		httpx.Fail(w, http.StatusBadRequest, "invalid_request")
+		return
+	}
+
+	timeout := s.deps.Config.Search.Timeout
+	ctx, cancel := context.WithTimeout(r.Context(), timeout)
+	defer cancel()
+
+	started := time.Now()
+	items, candidates, err := s.deps.Search.Search(ctx, session.ClassID, req.Query, req.TopK)
+	switch {
+	case errors.Is(err, search.ErrInvalidQuery):
+		httpx.Fail(w, http.StatusBadRequest, "invalid_query")
+		return
+	case errors.Is(err, context.DeadlineExceeded):
+		// 超时返回 503，不返回部分结果（spec R10.2）。
+		slog.Warn("检索超时", "user_id", session.UserID, "class_id", session.ClassID)
+		httpx.PermanentFailure(w)
+		return
+	case err != nil:
+		slog.Error("检索失败", "error", err)
+		httpx.PermanentFailure(w)
+		return
+	}
+
+	// 日志只记录必要信息：不写查询原文，也不写片段正文（spec R9）。
+	slog.Info("检索",
+		"user_id", session.UserID,
+		"class_id", session.ClassID,
+		"query_chars", len([]rune(strings.TrimSpace(req.Query))),
+		"candidates", candidates,
+		"results", len(items),
+		"duration_ms", time.Since(started).Milliseconds(),
+	)
+
+	if items == nil {
+		items = []search.Result{}
+	}
+	httpx.JSON(w, http.StatusOK, searchResponse{
+		Query:   strings.TrimSpace(req.Query),
+		ClassID: session.ClassID,
+		Count:   len(items),
+		Items:   items,
+	})
 }
 
 func toIdentity(session auth.Session) identityResponse {

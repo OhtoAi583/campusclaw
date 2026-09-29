@@ -16,7 +16,9 @@ import (
 	"campusclaw/backend/internal/auth"
 	"campusclaw/backend/internal/config"
 	"campusclaw/backend/internal/db"
+	"campusclaw/backend/internal/kb"
 	"campusclaw/backend/internal/materials"
+	"campusclaw/backend/internal/search"
 	"campusclaw/backend/internal/server"
 )
 
@@ -52,8 +54,26 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	if err := db.Seed(ctx, pool, cfg.Seed, hasher, cfg.UploadDir); err != nil {
+	// 检索所需的嵌入器与索引器：默认是本地确定性嵌入（见 change 的 design.md D3）。
+	embedder := kb.NewHashingEmbedder(cfg.Search.EmbeddingDim)
+	indexer := &kb.Indexer{
+		Embedder:  embedder,
+		ChunkSize: cfg.Search.ChunkSize,
+		Overlap:   cfg.Search.ChunkOverlap,
+	}
+
+	// 维度不一致时必须拒绝启动，避免用旧向量提供不可解释的结果。
+	if err := db.CheckEmbeddingDim(ctx, pool, cfg.Search.EmbeddingDim); err != nil {
 		return err
+	}
+	if err := db.Seed(ctx, pool, cfg.Seed, hasher, cfg.UploadDir, indexer); err != nil {
+		return err
+	}
+	// 为迭代 1 时期已入库、还没有索引块的材料补建索引。
+	if n, err := indexer.IndexMissing(ctx, pool); err != nil {
+		return err
+	} else if n > 0 {
+		slog.Info("已为历史材料补建索引", "materials", n)
 	}
 
 	sessions := auth.NewSessionStore(pool, cfg.SessionSecret, cfg.SessionTTL)
@@ -66,9 +86,16 @@ func run() error {
 		Hasher:   hasher,
 		Limiter:  limiter,
 		Materials: &materials.Handler{
-			Store:          materials.NewStore(pool),
+			Store:          materials.NewStore(pool).WithIndexer(indexer),
 			UploadDir:      cfg.UploadDir,
 			MaxUploadBytes: cfg.MaxUploadBytes,
+		},
+		Search: &search.Service{
+			DB:       pool,
+			Embedder: embedder,
+			TopKMax:  cfg.Search.TopKMax,
+			QueryMax: cfg.Search.QueryMaxChars,
+			MinScore: cfg.Search.MinScore,
 		},
 	})
 

@@ -87,6 +87,7 @@ export default function MaterialsPage({ identity, onExpired }: Props) {
   }
 
   const commands: Command[] = [
+    { label: '检索知识库', hint: '在本班材料里按内容检索', run: () => navigate('/search') },
     { label: '登出', hint: '清除服务端会话', run: () => void logout() },
     ...(identity.role === 'teacher'
       ? [{ label: '上传材料', hint: '教师可用', run: () => setUploadOpen(true) }]
@@ -105,6 +106,9 @@ export default function MaterialsPage({ identity, onExpired }: Props) {
             {identity.username}（{identity.role === 'teacher' ? '教师' : '学生'}）
           </span>
           <ThemeToggle />
+          <Link to="/search" className="ghost">
+            检索
+          </Link>
           {identity.role === 'teacher' ? (
             <button type="button" className="primary" onClick={() => setUploadOpen(true)}>
               上传材料

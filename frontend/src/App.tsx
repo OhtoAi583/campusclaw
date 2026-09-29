@@ -6,6 +6,7 @@ import { ToastProvider } from './components/Toast'
 import LoginPage from './pages/LoginPage'
 import MaterialsPage from './pages/MaterialsPage'
 import MaterialDetailPage from './pages/MaterialDetailPage'
+import SearchPage from './pages/SearchPage'
 
 export default function App() {
   const [identity, setIdentity] = useState<Identity | null>(null)
@@ -41,6 +42,10 @@ export default function App() {
         <Route
           path="/"
           element={identity ? <MaterialsPage identity={identity} onExpired={() => setIdentity(null)} /> : <Navigate to="/login" replace />}
+        />
+        <Route
+          path="/search"
+          element={identity ? <SearchPage identity={identity} onExpired={() => setIdentity(null)} /> : <Navigate to="/login" replace />}
         />
         <Route
           path="/materials/:id"

@@ -1,4 +1,4 @@
-import type { Identity, Material } from './types'
+import type { Identity, Material, SearchResponse } from './types'
 
 // 统一错误：把服务端状态码与错误码带给界面，
 // 但界面只按状态码决定"回登录页"还是"提示失败"，不改写服务端语义。
@@ -73,6 +73,13 @@ export const api = {
     URL.revokeObjectURL(url)
   },
 
+  // 本班范围内的知识库检索。范围由服务端会话决定，前端不传班级。
+  search: (query: string, topK = 5) =>
+    request<SearchResponse>('/api/search', {
+      method: 'POST',
+      body: JSON.stringify({ query, top_k: topK }),
+    }),
+
   // 上传走 XHR，为了拿到进度事件（R10.5）。
   upload: (file: File, onProgress: (percent: number) => void) =>
     new Promise<Material>((resolve, reject) => {
@@ -113,7 +120,7 @@ export function describeError(error: unknown): string {
   if (error instanceof ApiError) {
     switch (error.status) {
       case 400:
-        return '文件不符合要求（只支持 .txt / .md，且必须是非空 UTF-8 文本）'
+        return '请求不符合要求（检索词不能为空或过长；上传只支持 .txt / .md 的非空 UTF-8 文本）'
       case 401:
         return '登录状态已失效，请重新登录'
       case 403:

@@ -22,6 +22,20 @@ type Config struct {
 	LoginLock        time.Duration
 	Seed             Seed
 	DB               DB
+	Search           Search
+}
+
+// Search 是知识库检索相关配置。
+type Search struct {
+	EmbeddingDim  int
+	ChunkSize     int
+	ChunkOverlap  int
+	TopKMax       int
+	QueryMaxChars int
+	Timeout       time.Duration
+	// MinScore 是最低相似度阈值：低于它的候选被视为"没有匹配"，
+	// 避免哈希嵌入的碰撞噪声让无关查询也返回结果（spec R2.4）。
+	MinScore float64
 }
 
 // DB 是数据库连接配置。
@@ -78,6 +92,16 @@ func Load() (Config, error) {
 		StudentB1Password: required("SEED_STUDENT_B1_PASSWORD"),
 	}
 
+	cfg.Search = Search{
+		EmbeddingDim:  envInt("EMBEDDING_DIM", 512),
+		ChunkSize:     envInt("CHUNK_SIZE", 600),
+		ChunkOverlap:  envInt("CHUNK_OVERLAP", 80),
+		TopKMax:       envInt("SEARCH_TOP_K_MAX", 20),
+		QueryMaxChars: envInt("SEARCH_QUERY_MAX_CHARS", 200),
+		MinScore:      envFloat("SEARCH_MIN_SCORE", 0.15),
+	}
+	cfg.Search.Timeout = envDurationMs("SEARCH_TIMEOUT_MS", 1500*time.Millisecond)
+
 	cfg.SessionTTL = envDuration("SESSION_TTL_HOURS", 8*time.Hour)
 	cfg.LoginWindow = envDuration("LOGIN_WINDOW_MINUTES", 15*time.Minute)
 	cfg.LoginLock = envDuration("LOGIN_LOCK_MINUTES", 15*time.Minute)
@@ -92,7 +116,56 @@ func Load() (Config, error) {
 	if cfg.MaxUploadBytes <= 0 {
 		return Config{}, errors.New("MAX_UPLOAD_BYTES 必须为正整数")
 	}
+	if err := validateSearch(cfg.Search); err != nil {
+		return Config{}, err
+	}
 	return cfg, nil
+}
+
+// validateSearch 拒绝会让检索不可解释的配置组合（对应 spec R10.3）。
+func validateSearch(s Search) error {
+	if s.EmbeddingDim <= 0 {
+		return errors.New("EMBEDDING_DIM 必须为正整数")
+	}
+	if s.ChunkSize <= 0 {
+		return errors.New("CHUNK_SIZE 必须为正整数")
+	}
+	if s.ChunkOverlap < 0 || s.ChunkOverlap >= s.ChunkSize {
+		return fmt.Errorf("CHUNK_OVERLAP（%d）必须大于等于 0 且小于 CHUNK_SIZE（%d）", s.ChunkOverlap, s.ChunkSize)
+	}
+	if s.TopKMax <= 0 {
+		return errors.New("SEARCH_TOP_K_MAX 必须为正整数")
+	}
+	if s.QueryMaxChars <= 0 {
+		return errors.New("SEARCH_QUERY_MAX_CHARS 必须为正整数")
+	}
+	if s.Timeout <= 0 {
+		return errors.New("SEARCH_TIMEOUT_MS 必须为正整数")
+	}
+	if s.MinScore < 0 || s.MinScore >= 1 {
+		return errors.New("SEARCH_MIN_SCORE 必须在 [0,1) 之间")
+	}
+	return nil
+}
+
+// envFloat 读取浮点型配置。
+func envFloat(key string, fallback float64) float64 {
+	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil {
+			return f
+		}
+	}
+	return fallback
+}
+
+// envDurationMs 读取以毫秒为单位的时长。
+func envDurationMs(key string, fallback time.Duration) time.Duration {
+	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			return time.Duration(n) * time.Millisecond
+		}
+	}
+	return fallback
 }
 
 // validateSeedPasswords 只做最低强度的检查，避免把 "change-me" 一类口令当作可用的预置账号。

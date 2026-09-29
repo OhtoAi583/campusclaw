@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { api, describeError } from '../api'
@@ -7,8 +7,15 @@ import type { Material } from '../types'
 import { ThemeToggle } from '../components/ThemeToggle'
 import { useToast } from '../components/Toast'
 
+// 与后端一致地按"码点"切分，避免把表情等多字节字符算错位置。
+function sliceByCodePoints(text: string, start: number, end: number) {
+  const points = Array.from(text)
+  return points.slice(start, end).join('')
+}
+
 export default function MaterialDetailPage({ onExpired }: { onExpired: () => void }) {
   const { id } = useParams()
+  const [params] = useSearchParams()
   const toast = useToast()
   const [material, setMaterial] = useState<Material | null>(null)
   const [error, setError] = useState('')
@@ -34,6 +41,14 @@ export default function MaterialDetailPage({ onExpired }: { onExpired: () => voi
   useEffect(() => {
     void load()
   }, [load])
+
+  // 从检索结果跳进来时，用字符区间把命中的片段标出来（spec R7.2）。
+  const startParam = Number(params.get('start'))
+  const endParam = Number(params.get('end'))
+  const content = material?.content
+  const hasHighlight =
+    Number.isInteger(startParam) && Number.isInteger(endParam) && endParam > startParam && !!content
+  const highlight = hasHighlight && content ? sliceByCodePoints(content, startParam, endParam) : ''
 
   async function download() {
     if (!material) return
@@ -77,6 +92,12 @@ export default function MaterialDetailPage({ onExpired }: { onExpired: () => voi
             <button type="button" className="primary" onClick={() => void download()}>
               下载原文件
             </button>
+            {highlight ? (
+              <div className="highlight-box">
+                <p className="muted small">来自检索结果的命中片段（字符 {startParam}–{endParam}）</p>
+                <pre className="highlight-text">{highlight}</pre>
+              </div>
+            ) : null}
             <div className="markdown">
               {/* react-markdown 默认不解析内联 HTML，材料里的 <script> 只会以文本呈现。 */}
               <ReactMarkdown remarkPlugins={[remarkGfm]}>{material.content ?? ''}</ReactMarkdown>

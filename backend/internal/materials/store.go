@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"time"
 
+	"campusclaw/backend/internal/kb"
 	"campusclaw/backend/internal/knowledge"
 )
 
@@ -49,10 +50,18 @@ type CreateInput struct {
 // Store 是材料的数据访问层。
 type Store struct {
 	db *sql.DB
+	// Indexer 负责在同一事务里写入检索块；为 nil 时表示本实例不做索引（仅测试场景）。
+	Indexer *kb.Indexer
 }
 
 // NewStore 构造材料存储。
 func NewStore(db *sql.DB) *Store { return &Store{db: db} }
+
+// WithIndexer 设置索引器，返回自身便于链式调用。
+func (s *Store) WithIndexer(ix *kb.Indexer) *Store {
+	s.Indexer = ix
+	return s
+}
 
 // ListByClass 返回本班材料。隔离条件写死在 SQL 里，调用方无法把它省掉。
 func (s *Store) ListByClass(ctx context.Context, classID int64) ([]Material, error) {
@@ -123,6 +132,12 @@ func (s *Store) Create(ctx context.Context, in CreateInput) (Material, error) {
 	}
 	if err := knowledge.InsertTx(ctx, tx, id, in.ClassID, in.Content); err != nil {
 		return Material{}, err
+	}
+	// 索引与正文、材料同事务：不允许出现"材料在库里但检索不到"的中间态。
+	if s.Indexer != nil {
+		if err := s.Indexer.WriteTx(ctx, tx, id, in.ClassID, in.Content); err != nil {
+			return Material{}, err
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		return Material{}, fmt.Errorf("提交事务失败: %w", err)

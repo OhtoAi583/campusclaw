@@ -1,0 +1,60 @@
+{
+  "description": "迭代 2 检索质量门禁：hit 用例判定命中率，isolation 用例判定班级隔离（必须全部返回空）",
+  "threshold": 0.8,
+  "cases": [
+    {
+      "kind": "hit",
+      "name": "A班·导入环节",
+      "as": "student_a1",
+      "query": "导入环节的设计意图",
+      "expect_material_title_contains": "语文阅读课教学设计",
+      "expect_content_contains": "情境图"
+    },
+    {
+      "kind": "hit",
+      "name": "A班·分层作业",
+      "as": "student_a1",
+      "query": "分层作业 基础层 挑战层",
+      "expect_material_title_contains": "语文阅读课教学设计",
+      "expect_content_contains": "基础层"
+    },
+    {
+      "kind": "hit",
+      "name": "A班·教学反思",
+      "as": "student_a1",
+      "query": "教学反思 精读时间",
+      "expect_material_title_contains": "语文阅读课教学设计",
+      "expect_content_contains": "一句话回答"
+    },
+    {
+      "kind": "hit",
+      "name": "B班·验算习惯",
+      "as": "student_b1",
+      "query": "验算习惯 怎么培养",
+      "expect_material_title_contains": "数学课堂练习设计",
+      "expect_content_contains": "验算"
+    },
+    {
+      "kind": "hit",
+      "name": "B班·常见错误",
+      "as": "student_b1",
+      "query": "分数除法 常见错误",
+      "expect_material_title_contains": "数学课堂练习设计",
+      "expect_content_contains": "错因"
+    },
+    {
+      "kind": "isolation",
+      "name": "隔离·A班检索B班关键词",
+      "as": "student_a1",
+      "query": "分数四则运算 验算习惯 错题",
+      "forbidden_material_title_contains": "数学课堂练习设计"
+    },
+    {
+      "kind": "isolation",
+      "name": "隔离·B班检索A班关键词",
+      "as": "student_b1",
+      "query": "语文阅读课 概括能力 仿写",
+      "forbidden_material_title_contains": "语文阅读课教学设计"
+    }
+  ]
+}

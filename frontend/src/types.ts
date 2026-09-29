@@ -19,3 +19,21 @@ export interface Material {
   created_at: string
   content?: string
 }
+
+export interface SearchResult {
+  material_id: number
+  material_title: string
+  original_name: string
+  chunk_index: number
+  start_offset: number
+  end_offset: number
+  content: string
+  score: number
+}
+
+export interface SearchResponse {
+  query: string
+  class_id: number
+  count: number
+  items: SearchResult[]
+}
