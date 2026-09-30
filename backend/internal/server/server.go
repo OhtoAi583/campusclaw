@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"campusclaw/backend/internal/answer"
 	"campusclaw/backend/internal/auth"
 	"campusclaw/backend/internal/config"
 	"campusclaw/backend/internal/httpx"
@@ -29,6 +30,7 @@ type Deps struct {
 	Limiter   *auth.Limiter
 	Materials *materials.Handler
 	Search    *search.Service
+	Answer    *answer.Service
 }
 
 type server struct {
@@ -61,6 +63,8 @@ func New(deps Deps) http.Handler {
 		httpx.RequireRole("teacher", http.HandlerFunc(deps.Materials.Upload)), deps.Sessions, deps.Tokens))
 	// 本班范围内的知识库检索：与列表、详情同一条班级边界，班级只取自会话。
 	mux.Handle("POST /api/search", httpx.RequireAuth(http.HandlerFunc(s.search), deps.Sessions, deps.Tokens))
+	// 基于知识库的问答：先在本班检索，取得切片后才生成回答并标注出处。
+	mux.Handle("POST /api/ask", httpx.RequireAuth(http.HandlerFunc(s.ask), deps.Sessions, deps.Tokens))
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, http.StatusNotFound, "not_found")
@@ -268,6 +272,58 @@ func (s *server) tokenLogout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+type askRequest struct {
+	Question string `json:"question"`
+	TopK     int    `json:"top_k"`
+}
+
+// ask 执行"先检索、再生成"。无命中时不调用生成模型，直接返回固定文案与空 citations。
+func (s *server) ask(w http.ResponseWriter, r *http.Request) {
+	session, ok := httpx.SessionFrom(r.Context())
+	if !ok {
+		httpx.Fail(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	var req askRequest
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<10)).Decode(&req); err != nil {
+		httpx.Fail(w, http.StatusBadRequest, "invalid_request")
+		return
+	}
+	question := strings.TrimSpace(req.Question)
+	if question == "" {
+		httpx.Fail(w, http.StatusBadRequest, "empty_question")
+		return
+	}
+	if len([]rune(question)) > s.deps.Config.Search.QueryMaxChars {
+		httpx.Fail(w, http.StatusBadRequest, "question_too_long")
+		return
+	}
+
+	started := time.Now()
+	result, err := s.deps.Answer.Ask(r.Context(), session.ClassID, question, req.TopK)
+	switch {
+	case errors.Is(err, search.ErrInvalidQuery):
+		httpx.Fail(w, http.StatusBadRequest, "invalid_question")
+		return
+	case err != nil:
+		slog.Error("问答失败", "error", err)
+		httpx.PermanentFailure(w)
+		return
+	}
+
+	// 日志只记必要信息：不记问题原文与切片正文。
+	slog.Info("问答",
+		"user_id", session.UserID,
+		"class_id", session.ClassID,
+		"question_chars", len([]rune(question)),
+		"citations", len(result.Citations),
+		"model_called", result.ModelCalled,
+		"engine", result.Engine,
+		"duration_ms", time.Since(started).Milliseconds(),
+	)
+	httpx.JSON(w, http.StatusOK, result)
 }
 
 type searchRequest struct {

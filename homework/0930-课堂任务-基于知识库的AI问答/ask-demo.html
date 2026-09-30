@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>CampusClaw · 基于知识库的 AI 问答（实测）</title>
+<style>
+  :root{--brand:#9c1f24;--ok:#1a7f37;--bad:#b42318;--line:#e3ddd7}
+  *{box-sizing:border-box}
+  body{margin:0;padding:20px;background:#f7f5f2;color:#1f1c1b;font-family:-apple-system,'PingFang SC',system-ui,sans-serif}
+  h1{font-size:20px;color:var(--brand);margin:0 0 4px}
+  .sub{color:#6f6a67;font-size:13px;margin:0 0 16px}
+  .bar{background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px 14px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:14px}
+  input{font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:8px;flex:1 1 380px}
+  button{font:inherit;padding:7px 12px;border-radius:8px;border:1px solid var(--line);background:#fff;cursor:pointer}
+  button.primary{background:var(--brand);border-color:var(--brand);color:#fff}
+  .card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:12px}
+  .card h2{font-size:14px;margin:0 0 8px}
+  .badge{display:inline-block;font-size:12px;border-radius:999px;padding:2px 9px;margin-right:6px}
+  .b-ok{background:#e7f5ea;color:var(--ok)}
+  .b-bad{background:#fdecea;color:var(--bad)}
+  .answer{line-height:1.8;white-space:pre-wrap;font-size:15px}
+  .cite{color:var(--brand);font-weight:700}
+  .cite-item{border-left:3px solid var(--brand);padding:8px 12px;margin:8px 0;background:#faf8f6;border-radius:0 8px 8px 0}
+  .cite-item b{display:block;margin-bottom:4px}
+  .cite-item .snip{color:#5c5754;font-size:13px;line-height:1.6;max-height:66px;overflow:hidden}
+  .meta{font-size:12px;color:#6f6a67;margin-top:6px}
+  pre{background:#1f1c1b;color:#f3f0ee;border-radius:8px;padding:10px 12px;font-size:12px;overflow:auto;font-family:ui-monospace,Menlo,monospace}
+</style>
+</head>
+<body>
+  <h1>CampusClaw · 基于知识库的 AI 问答（浏览器实测）</h1>
+  <p class="sub">先在本班材料里检索，取得切片之后才生成回答；回答中的 [1][2] 与下方出处列表一一对应。以下结果均来自真实接口调用。</p>
+
+  <div class="bar">
+    <input id="q" value="导入环节为什么要用情境图？" />
+    <button class="primary" onclick="ask()">提问</button>
+    <button onclick="askNoEvidence()">问一个本班没有依据的问题</button>
+    <button onclick="askAnonymous()">未登录提问</button>
+  </div>
+
+  <div class="card">
+    <h2>回答</h2>
+    <div id="badges"></div>
+    <div id="answer" class="answer">等待提问…</div>
+    <div id="meta" class="meta"></div>
+  </div>
+
+  <div class="card">
+    <h2>出处（citations）</h2>
+    <div id="citations">—</div>
+  </div>
+
+  <div class="card">
+    <h2>接口原始返回</h2>
+    <pre id="raw">—</pre>
+  </div>
+
+<script>
+function markCitations(text) {
+  return text.replace(/\[(\d+)\]/g, '<span class="cite">[$1]</span>');
+}
+function render(data, status) {
+  const called = data.model_called;
+  document.getElementById('badges').innerHTML =
+    `<span class="badge ${status===200?'b-ok':'b-bad'}">HTTP ${status}</span>` +
+    `<span class="badge ${called?'b-ok':'b-bad'}">model_called: ${called}</span>` +
+    `<span class="badge">engine: ${data.engine || '-'}</span>`;
+  document.getElementById('answer').innerHTML = markCitations(data.answer || '（无回答）');
+  document.getElementById('meta').textContent =
+    called
+      ? '生成模型的输入只有：材料标题、切片序号、切片正文、用户提问。没有向量分量，也没有其他班级的切片。'
+      : '未命中任何本班切片 → 不调用生成模型，直接返回固定文案，citations 为空。';
+  const list = data.citations || [];
+  document.getElementById('citations').innerHTML = list.length === 0
+    ? '<span style="color:#b42318">（空）</span>'
+    : list.map(c => `<div class="cite-item"><b>[${c.index}] ${c.material_title}</b>
+        <span style="font-size:12px;color:#6f6a67">出处文件：${c.original_name} · 第 ${c.chunk_index+1} 块 · 字符 ${c.start_offset}–${c.end_offset} · 相似度 ${c.score.toFixed(3)}</span>
+        <div class="snip">${c.snippet.replace(/[<>&]/g, s => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[s]))}</div></div>`).join('');
+  document.getElementById('raw').textContent = JSON.stringify(data, null, 2);
+}
+async function askWith(question) {
+  const res = await fetch('/api/ask', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ question }),
+  });
+  let data; try { data = await res.json(); } catch { data = { answer: '（无响应体）' }; }
+  render(data, res.status);
+}
+function ask() { askWith(document.getElementById('q').value); }
+function askNoEvidence() {
+  document.getElementById('q').value = '分数除法验算习惯怎么培养？';
+  askWith('分数除法验算习惯怎么培养？');   // 该内容只存在于 B 班材料
+}
+async function askAnonymous() {
+  await fetch('/api/logout', { method: 'POST' }).catch(() => {});
+  await askWith('导入环节怎么设计？');
+}
+</script>
+</body>
+</html>

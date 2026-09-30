@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"campusclaw/backend/internal/answer"
 	"campusclaw/backend/internal/auth"
 	"campusclaw/backend/internal/config"
 	"campusclaw/backend/internal/db"
@@ -81,6 +82,14 @@ func run() error {
 	// token 方案：HS256 访问令牌 + 可撤销的刷新令牌
 	tokens := auth.NewTokenService(pool, cfg.JWTSecret, cfg.AccessTokenTTL, cfg.RefreshTokenTTL)
 
+	searchService := &search.Service{
+		DB:       pool,
+		Embedder: embedder,
+		TopKMax:  cfg.Search.TopKMax,
+		QueryMax: cfg.Search.QueryMaxChars,
+		MinScore: cfg.Search.MinScore,
+	}
+
 	api := server.New(server.Deps{
 		Config:   cfg,
 		DB:       pool,
@@ -93,13 +102,13 @@ func run() error {
 			UploadDir:      cfg.UploadDir,
 			MaxUploadBytes: cfg.MaxUploadBytes,
 		},
-		Search: &search.Service{
-			DB:       pool,
-			Embedder: embedder,
-			TopKMax:  cfg.Search.TopKMax,
-			QueryMax: cfg.Search.QueryMaxChars,
-			MinScore: cfg.Search.MinScore,
+		Answer: &answer.Service{
+			Search: searchService,
+			// 未配置对话网关时使用本地摘录实现：回答只由检索到的切片拼成，
+			// 不凭空生成内容，同样满足"可溯源"。配置网关后换成真实模型即可。
+			Chat: answer.ExtractiveClient{},
 		},
+		Search: searchService,
 	})
 
 	srv := &http.Server{
