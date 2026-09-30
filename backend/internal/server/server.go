@@ -24,6 +24,7 @@ type Deps struct {
 	Config    config.Config
 	DB        *sql.DB
 	Sessions  *auth.SessionStore
+	Tokens    *auth.TokenService
 	Hasher    *auth.Hasher
 	Limiter   *auth.Limiter
 	Materials *materials.Handler
@@ -45,16 +46,21 @@ func New(deps Deps) http.Handler {
 	mux.HandleFunc("POST /api/login", s.login)
 	mux.HandleFunc("POST /api/logout", s.logout)
 
+	// token 方案：换取访问令牌、刷新、撤销（与 Cookie 方案并存，互不影响）。
+	mux.HandleFunc("POST /api/token", s.tokenLogin)
+	mux.HandleFunc("POST /api/token/refresh", s.tokenRefresh)
+	mux.HandleFunc("POST /api/token/logout", s.tokenLogout)
+
 	// 受保护接口：默认拒绝，未登录一律 401。
-	mux.Handle("GET /api/me", httpx.RequireAuth(http.HandlerFunc(s.me), deps.Sessions))
-	mux.Handle("GET /api/materials", httpx.RequireAuth(http.HandlerFunc(deps.Materials.List), deps.Sessions))
-	mux.Handle("GET /api/materials/{id}", httpx.RequireAuth(http.HandlerFunc(deps.Materials.Detail), deps.Sessions))
-	mux.Handle("GET /api/materials/{id}/file", httpx.RequireAuth(http.HandlerFunc(deps.Materials.File), deps.Sessions))
+	mux.Handle("GET /api/me", httpx.RequireAuth(http.HandlerFunc(s.me), deps.Sessions, deps.Tokens))
+	mux.Handle("GET /api/materials", httpx.RequireAuth(http.HandlerFunc(deps.Materials.List), deps.Sessions, deps.Tokens))
+	mux.Handle("GET /api/materials/{id}", httpx.RequireAuth(http.HandlerFunc(deps.Materials.Detail), deps.Sessions, deps.Tokens))
+	mux.Handle("GET /api/materials/{id}/file", httpx.RequireAuth(http.HandlerFunc(deps.Materials.File), deps.Sessions, deps.Tokens))
 	// 上传是教师专属：先认证，再按会话角色授权（垂直权限）。
 	mux.Handle("POST /api/materials", httpx.RequireAuth(
-		httpx.RequireRole("teacher", http.HandlerFunc(deps.Materials.Upload)), deps.Sessions))
+		httpx.RequireRole("teacher", http.HandlerFunc(deps.Materials.Upload)), deps.Sessions, deps.Tokens))
 	// 本班范围内的知识库检索：与列表、详情同一条班级边界，班级只取自会话。
-	mux.Handle("POST /api/search", httpx.RequireAuth(http.HandlerFunc(s.search), deps.Sessions))
+	mux.Handle("POST /api/search", httpx.RequireAuth(http.HandlerFunc(s.search), deps.Sessions, deps.Tokens))
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, http.StatusNotFound, "not_found")
@@ -179,6 +185,89 @@ func (s *server) me(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.JSON(w, http.StatusOK, toIdentity(session))
+}
+
+type tokenRequest struct {
+	Username     string `json:"username"`
+	Password     string `json:"password"`
+	RefreshToken string `json:"refresh_token"`
+}
+
+// tokenLogin 校验账号口令并签发 JWT 访问令牌 + 刷新令牌。
+// 与 Cookie 方案共用同一套口令校验、失败文案与限流逻辑。
+func (s *server) tokenLogin(w http.ResponseWriter, r *http.Request) {
+	var req tokenRequest
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<10)).Decode(&req); err != nil {
+		httpx.Fail(w, http.StatusBadRequest, "invalid_request")
+		return
+	}
+	username := strings.TrimSpace(req.Username)
+	key := username + "|" + clientIP(r)
+
+	var (
+		userID int64
+		hash   string
+	)
+	err := s.deps.DB.QueryRowContext(r.Context(),
+		`SELECT id, password_hash FROM users WHERE username = ?`, username).Scan(&userID, &hash)
+	allowed := s.deps.Limiter.Allowed(key)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		s.deps.Hasher.VerifyDummy(req.Password)
+		s.failLogin(w, key)
+		return
+	case err != nil:
+		slog.Error("查询用户失败", "error", err)
+		httpx.PermanentFailure(w)
+		return
+	case !allowed:
+		s.deps.Hasher.VerifyDummy(req.Password)
+		s.failLogin(w, key)
+		return
+	case s.deps.Hasher.Verify(hash, req.Password) != nil:
+		s.failLogin(w, key)
+		return
+	}
+	s.deps.Limiter.Reset(key)
+
+	pair, err := s.deps.Tokens.Issue(r.Context(), userID)
+	if err != nil {
+		slog.Error("签发令牌失败", "error", err)
+		httpx.PermanentFailure(w)
+		return
+	}
+	slog.Info("签发访问令牌", "username", username, "user_id", userID, "expires_in", pair.ExpiresIn)
+	httpx.JSON(w, http.StatusOK, pair)
+}
+
+// tokenRefresh 用刷新令牌换新令牌对（旧刷新令牌一次性作废，即轮换）。
+func (s *server) tokenRefresh(w http.ResponseWriter, r *http.Request) {
+	var req tokenRequest
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<10)).Decode(&req); err != nil {
+		httpx.Fail(w, http.StatusBadRequest, "invalid_request")
+		return
+	}
+	pair, err := s.deps.Tokens.Refresh(r.Context(), strings.TrimSpace(req.RefreshToken))
+	if err != nil {
+		httpx.Fail(w, http.StatusUnauthorized, "invalid_token")
+		return
+	}
+	httpx.JSON(w, http.StatusOK, pair)
+}
+
+// tokenLogout 撤销刷新令牌。访问令牌是无状态的，只能等它自然过期（写在 README 的已知限制里）。
+func (s *server) tokenLogout(w http.ResponseWriter, r *http.Request) {
+	var req tokenRequest
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<10)).Decode(&req); err != nil {
+		httpx.Fail(w, http.StatusBadRequest, "invalid_request")
+		return
+	}
+	if err := s.deps.Tokens.Revoke(r.Context(), strings.TrimSpace(req.RefreshToken)); err != nil {
+		slog.Error("撤销刷新令牌失败", "error", err)
+		httpx.PermanentFailure(w)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 type searchRequest struct {

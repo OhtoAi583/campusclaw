@@ -7,6 +7,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"campusclaw/backend/internal/auth"
@@ -14,6 +15,16 @@ import (
 
 // CookieName 是承载服务端会话标识的 Cookie 名。
 const CookieName = "campusclaw_session"
+
+// bearerToken 从 Authorization 头取 Bearer 令牌。
+func bearerToken(r *http.Request) (string, bool) {
+	header := r.Header.Get("Authorization")
+	const prefix = "Bearer "
+	if len(header) <= len(prefix) || !strings.EqualFold(header[:len(prefix)], prefix) {
+		return "", false
+	}
+	return strings.TrimSpace(header[len(prefix):]), true
+}
 
 type ctxKey int
 
@@ -57,18 +68,44 @@ func PermanentFailure(w http.ResponseWriter) {
 	Fail(w, http.StatusServiceUnavailable, "service_unavailable")
 }
 
-// RequireAuth 默认拒绝：没有有效会话时直接 401，且响应体不含任何业务数据。
-func RequireAuth(next http.Handler, store *auth.SessionStore) http.Handler {
+// RequireAuth 默认拒绝：没有有效凭据时直接 401，且响应体不含任何业务数据。
+//
+// 支持两种凭据方案，二者最终都换回同一组身份（user_id / role / class_id）：
+//   - Cookie：服务端会话（迭代 1 的方案）
+//   - Bearer：JWT 访问令牌（token 方案）。令牌载荷只提供 sub，
+//     role 与 class_id 每次回 users 表读取，绝不采信令牌里的声明。
+func RequireAuth(next http.Handler, sessions *auth.SessionStore, tokens *auth.TokenService) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// 1) Authorization: Bearer <jwt>
+		if raw, ok := bearerToken(r); ok {
+			claims, err := tokens.Verify(raw)
+			if err != nil {
+				Fail(w, http.StatusUnauthorized, "unauthorized")
+				return
+			}
+			session, err := sessions.ByUserID(r.Context(), claims.Subject)
+			switch {
+			case errors.Is(err, auth.ErrNoSession):
+				Fail(w, http.StatusUnauthorized, "unauthorized")
+				return
+			case err != nil:
+				slog.Error("读取用户失败", "error", err)
+				PermanentFailure(w)
+				return
+			}
+			next.ServeHTTP(w, r.WithContext(WithSession(r.Context(), session)))
+			return
+		}
+
+		// 2) Cookie：服务端会话
 		cookie, err := r.Cookie(CookieName)
 		if err != nil {
 			Fail(w, http.StatusUnauthorized, "unauthorized")
 			return
 		}
-		session, err := store.Lookup(r.Context(), cookie.Value)
+		session, err := sessions.Lookup(r.Context(), cookie.Value)
 		switch {
 		case errors.Is(err, auth.ErrNoSession):
-			// 会话不存在或已过期：这是"未认证"，返回 401。
 			Fail(w, http.StatusUnauthorized, "unauthorized")
 			return
 		case err != nil:

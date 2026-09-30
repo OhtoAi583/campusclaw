@@ -78,11 +78,14 @@ func run() error {
 
 	sessions := auth.NewSessionStore(pool, cfg.SessionSecret, cfg.SessionTTL)
 	limiter := auth.NewLimiter(cfg.LoginMaxAttempts, cfg.LoginWindow, cfg.LoginLock)
+	// token 方案：HS256 访问令牌 + 可撤销的刷新令牌
+	tokens := auth.NewTokenService(pool, cfg.JWTSecret, cfg.AccessTokenTTL, cfg.RefreshTokenTTL)
 
 	api := server.New(server.Deps{
 		Config:   cfg,
 		DB:       pool,
 		Sessions: sessions,
+		Tokens:   tokens,
 		Hasher:   hasher,
 		Limiter:  limiter,
 		Materials: &materials.Handler{

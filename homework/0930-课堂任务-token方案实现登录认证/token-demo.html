@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>CampusClaw · token 方案登录认证（实测）</title>
+<style>
+  :root{--brand:#9c1f24;--ok:#1a7f37;--bad:#b42318;--line:#e3ddd7}
+  *{box-sizing:border-box}
+  body{margin:0;padding:20px;background:#f7f5f2;color:#1f1c1b;font-family:-apple-system,'PingFang SC',system-ui,sans-serif}
+  h1{font-size:20px;color:var(--brand);margin:0 0 4px}
+  .sub{color:#6f6a67;font-size:13px;margin:0 0 16px}
+  .bar{background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px 14px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:14px}
+  input{font:inherit;padding:6px 10px;border:1px solid var(--line);border-radius:8px}
+  button{font:inherit;padding:6px 12px;border-radius:8px;border:1px solid var(--line);background:#fff;cursor:pointer}
+  button.primary{background:var(--brand);border-color:var(--brand);color:#fff}
+  .card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:12px}
+  .card h2{font-size:14px;margin:0 0 8px}
+  pre{background:#1f1c1b;color:#f3f0ee;border-radius:8px;padding:10px 12px;font-size:12px;overflow:auto;margin:6px 0 0;font-family:ui-monospace,Menlo,monospace;line-height:1.5}
+  .kv{font-family:ui-monospace,Menlo,monospace;font-size:12.5px;padding:3px 0;word-break:break-all}
+  .ok{color:var(--ok);font-weight:600}.bad{color:var(--bad);font-weight:600}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  @media(max-width:900px){.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+  <h1>CampusClaw · token 方案实现登录认证（浏览器实测）</h1>
+  <p class="sub">本页所有结果都来自浏览器对真实接口的调用，未做任何改写。令牌只保存在内存里，通过 Authorization: Bearer 头发送。</p>
+
+  <div class="bar">
+    <input id="u" value="student_a1" />
+    <input id="p" type="password" placeholder="口令" />
+    <button class="primary" onclick="login()">1. 换取访问令牌</button>
+    <button onclick="callWith()">2. 带 Bearer 取本班材料</button>
+    <button onclick="callWithout()">3. 不带令牌</button>
+    <button onclick="callTampered()">4. 篡改令牌</button>
+    <button onclick="uploadAsStudent()">5. 学生令牌上传</button>
+    <button onclick="refresh()">6. 刷新令牌</button>
+    <button onclick="reuseOldRefresh()">7. 旧刷新令牌再用</button>
+  </div>
+
+  <div class="card">
+    <h2>令牌内容（JWT 是三段式：header.payload.signature）</h2>
+    <div id="tokenInfo" class="kv">尚未获取令牌。</div>
+    <pre id="decoded">—</pre>
+  </div>
+
+  <div class="grid">
+    <div class="card"><h2>请求结果</h2><div id="result" class="kv">等待操作…</div></div>
+    <div class="card"><h2>响应摘要</h2><pre id="body">—</pre></div>
+  </div>
+
+<script>
+let accessToken = null, refreshToken = null, oldRefresh = null;
+
+function showResult(label, status, extra) {
+  const cls = status >= 200 && status < 300 ? 'ok' : 'bad';
+  document.getElementById('result').innerHTML =
+    `${label}<br>HTTP 状态：<span class="${cls}">${status}</span>${extra ? '<br>' + extra : ''}`;
+}
+function showBody(v) {
+  document.getElementById('body').textContent = typeof v === 'string' ? v : JSON.stringify(v, null, 2);
+}
+function decodeJWT(t) {
+  const [h, p] = t.split('.');
+  const d = (x) => JSON.parse(decodeURIComponent(escape(atob(x.replace(/-/g, '+').replace(/_/g, '/')))));
+  return { header: d(h), payload: d(p) };
+}
+
+async function login() {
+  const res = await fetch('/api/token', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: u.value, password: p.value }),
+  });
+  const data = await res.json();
+  if (!res.ok) { showResult('换取令牌失败（口令错误时与"用户不存在"文案一致）', res.status); showBody(data); return; }
+  accessToken = data.access_token; refreshToken = data.refresh_token;
+  const { header, payload } = decodeJWT(accessToken);
+  document.getElementById('tokenInfo').innerHTML =
+    `<b>token_type</b>: ${data.token_type}　<b>expires_in</b>: ${data.expires_in} 秒<br>` +
+    `<b>access_token</b>: ${accessToken.slice(0, 72)}…<br>` +
+    `<b>refresh_token</b>: ${refreshToken.slice(0, 32)}…（服务端只存它的哈希，可撤销）`;
+  document.getElementById('decoded').textContent =
+    '// header（算法与类型）\n' + JSON.stringify(header, null, 2) +
+    '\n\n// payload（只有 sub 与时间戳，没有 role / class_id）\n' + JSON.stringify(payload, null, 2) +
+    '\n\n// 过期时间：' + new Date(payload.exp * 1000).toLocaleString('zh-CN');
+  showResult('已签发访问令牌（此时还没有任何 Cookie）', res.status);
+  showBody({ token_type: data.token_type, expires_in: data.expires_in, refresh_ttl_days: 7 });
+}
+
+async function callWith() {
+  const res = await fetch('/api/materials', { headers: { Authorization: 'Bearer ' + accessToken } });
+  const data = await res.json();
+  showResult('Authorization: Bearer &lt;token&gt; 取本班材料', res.status,
+    `返回 class_id = ${data.class_id}，材料 ${data.items ? data.items.length : 0} 篇`);
+  showBody(data.items ? data.items.map(i => ({ id: i.id, title: i.title, class_id: i.class_id })) : data);
+}
+async function callWithout() {
+  const res = await fetch('/api/materials');
+  showResult('不带任何凭据请求受保护接口', res.status, '响应体不含材料标题或正文');
+  showBody(await res.json());
+}
+async function callTampered() {
+  const bad = accessToken.slice(0, -1) + (accessToken.endsWith('A') ? 'B' : 'A');
+  const res = await fetch('/api/materials', { headers: { Authorization: 'Bearer ' + bad } });
+  showResult('把令牌最后一个字符改掉（签名不匹配）', res.status, 'HMAC-SHA256 校验失败');
+  showBody(await res.json());
+}
+async function uploadAsStudent() {
+  const fd = new FormData();
+  fd.append('file', new File(['# 越权测试\n'], 'probe.md', { type: 'text/markdown' }));
+  const res = await fetch('/api/materials', { method: 'POST', headers: { Authorization: 'Bearer ' + accessToken }, body: fd });
+  showResult('用学生令牌调用教师专属上传', res.status,
+    '令牌里没有角色声明，服务端按 sub 回库取角色 → 学生 → 拒绝');
+  showBody(await res.json());
+}
+async function refresh() {
+  oldRefresh = refreshToken;
+  const res = await fetch('/api/token/refresh', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ refresh_token: refreshToken }),
+  });
+  const data = await res.json();
+  if (!res.ok) { showResult('刷新失败', res.status); showBody(data); return; }
+  const before = accessToken.slice(0, 24);
+  accessToken = data.access_token; refreshToken = data.refresh_token;
+  showResult('用刷新令牌换新令牌对（轮换）', res.status,
+    `新 access_token 前 24 位：${before} → ${accessToken.slice(0, 24)}`);
+  showBody({ token_type: data.token_type, expires_in: data.expires_in });
+}
+async function reuseOldRefresh() {
+  const res = await fetch('/api/token/refresh', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ refresh_token: oldRefresh || refreshToken }),
+  });
+  showResult('再用已经被轮换掉的旧刷新令牌', res.status, '一次性使用：旧刷新令牌已失效');
+  showBody(await res.json());
+}
+</script>
+</body>
+</html>

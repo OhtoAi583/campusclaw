@@ -15,6 +15,9 @@ type Config struct {
 	Addr             string
 	SessionSecret    string
 	SessionTTL       time.Duration
+	JWTSecret        string
+	AccessTokenTTL   time.Duration
+	RefreshTokenTTL  time.Duration
 	UploadDir        string
 	MaxUploadBytes   int64
 	LoginMaxAttempts int
@@ -76,6 +79,7 @@ func Load() (Config, error) {
 	cfg := Config{
 		Addr:             envDefault("APP_ADDR", ":"+envDefault("APP_PORT", "8080")),
 		SessionSecret:    required("SESSION_SECRET"),
+		JWTSecret:        required("JWT_SECRET"),
 		UploadDir:        envDefault("UPLOAD_DIR", "/data/uploads"),
 		LoginMaxAttempts: envInt("LOGIN_MAX_ATTEMPTS", 5),
 	}
@@ -103,6 +107,8 @@ func Load() (Config, error) {
 	cfg.Search.Timeout = envDurationMs("SEARCH_TIMEOUT_MS", 1500*time.Millisecond)
 
 	cfg.SessionTTL = envDuration("SESSION_TTL_HOURS", 8*time.Hour)
+	cfg.AccessTokenTTL = time.Duration(envPositive("ACCESS_TOKEN_TTL_MINUTES", 15)) * time.Minute
+	cfg.RefreshTokenTTL = time.Duration(envPositive("REFRESH_TOKEN_TTL_DAYS", 7)) * 24 * time.Hour
 	cfg.LoginWindow = envDuration("LOGIN_WINDOW_MINUTES", 15*time.Minute)
 	cfg.LoginLock = envDuration("LOGIN_LOCK_MINUTES", 15*time.Minute)
 	cfg.MaxUploadBytes = envInt64("MAX_UPLOAD_BYTES", 2<<20)
@@ -153,6 +159,16 @@ func envFloat(key string, fallback float64) float64 {
 	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
 		if f, err := strconv.ParseFloat(v, 64); err == nil {
 			return f
+		}
+	}
+	return fallback
+}
+
+// envPositive 读取正整数配置，非法或非正时回落到默认值。
+func envPositive(key string, fallback int) int {
+	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			return n
 		}
 	}
 	return fallback

@@ -102,6 +102,24 @@ func (s *SessionStore) Lookup(ctx context.Context, token string) (Session, error
 	return sess, nil
 }
 
+// ByUserID 按用户 id 取身份。token 方案用它把 JWT 的 sub 换回 role 与 class_id——
+// 这两项不放在令牌载荷里，每次请求都从 users 表读。
+func (s *SessionStore) ByUserID(ctx context.Context, userID int64) (Session, error) {
+	var sess Session
+	err := s.db.QueryRowContext(ctx, `
+		SELECT u.id, u.username, u.role, u.class_id, c.name
+		FROM users u JOIN classes c ON c.id = u.class_id
+		WHERE u.id = ?`, userID).
+		Scan(&sess.UserID, &sess.Username, &sess.Role, &sess.ClassID, &sess.ClassName)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Session{}, ErrNoSession
+	}
+	if err != nil {
+		return Session{}, fmt.Errorf("读取用户失败: %w", err)
+	}
+	return sess, nil
+}
+
 // DeleteExpired 清理过期会话行，由后台协程定期调用。
 func (s *SessionStore) DeleteExpired(ctx context.Context) error {
 	_, err := s.db.ExecContext(ctx, `DELETE FROM sessions WHERE expires_at < UTC_TIMESTAMP()`)
