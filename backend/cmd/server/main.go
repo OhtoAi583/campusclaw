@@ -82,6 +82,15 @@ func run() error {
 	// token 方案：HS256 访问令牌 + 可撤销的刷新令牌
 	tokens := auth.NewTokenService(pool, cfg.JWTSecret, cfg.AccessTokenTTL, cfg.RefreshTokenTTL)
 
+	// 回答生成：配置了网关密钥就用真实模型，否则退回本地摘录（离线也能演示完整链路）。
+	var chatClient answer.ChatClient = answer.ExtractiveClient{}
+	if cfg.Chat.APIKey != "" {
+		chatClient = answer.NewGatewayClient(cfg.Chat.BaseURL, cfg.Chat.APIKey, cfg.Chat.Model, cfg.Chat.Timeout)
+		slog.Info("回答生成使用对话网关", "base", cfg.Chat.BaseURL, "model", cfg.Chat.Model)
+	} else {
+		slog.Info("未配置 CHAT_API_KEY，回答生成使用本地摘录实现")
+	}
+
 	searchService := &search.Service{
 		DB:       pool,
 		Embedder: embedder,
@@ -102,12 +111,7 @@ func run() error {
 			UploadDir:      cfg.UploadDir,
 			MaxUploadBytes: cfg.MaxUploadBytes,
 		},
-		Answer: &answer.Service{
-			Search: searchService,
-			// 未配置对话网关时使用本地摘录实现：回答只由检索到的切片拼成，
-			// 不凭空生成内容，同样满足"可溯源"。配置网关后换成真实模型即可。
-			Chat: answer.ExtractiveClient{},
-		},
+		Answer: &answer.Service{Search: searchService, Chat: chatClient},
 		Search: searchService,
 	})
 

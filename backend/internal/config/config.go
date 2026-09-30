@@ -26,6 +26,7 @@ type Config struct {
 	Seed             Seed
 	DB               DB
 	Search           Search
+	Chat             Chat
 }
 
 // Search 是知识库检索相关配置。
@@ -39,6 +40,14 @@ type Search struct {
 	// MinScore 是最低相似度阈值：低于它的候选被视为"没有匹配"，
 	// 避免哈希嵌入的碰撞噪声让无关查询也返回结果（spec R2.4）。
 	MinScore float64
+}
+
+// Chat 是"回答生成"这一步的配置。APIKey 为空时退回本地摘录实现。
+type Chat struct {
+	BaseURL string
+	APIKey  string
+	Model   string
+	Timeout time.Duration
 }
 
 // DB 是数据库连接配置。
@@ -105,6 +114,13 @@ func Load() (Config, error) {
 		MinScore:      envFloat("SEARCH_MIN_SCORE", 0.15),
 	}
 	cfg.Search.Timeout = envDurationMs("SEARCH_TIMEOUT_MS", 1500*time.Millisecond)
+
+	cfg.Chat = Chat{
+		BaseURL: envDefault("CHAT_API_BASE", "https://api.deepseek.com"),
+		APIKey:  strings.TrimSpace(os.Getenv("CHAT_API_KEY")),
+		Model:   envDefault("CHAT_MODEL", "deepseek-chat"),
+		Timeout: envDurationMs("CHAT_TIMEOUT_MS", 20*time.Second),
+	}
 
 	cfg.SessionTTL = envDuration("SESSION_TTL_HOURS", 8*time.Hour)
 	cfg.AccessTokenTTL = time.Duration(envPositive("ACCESS_TOKEN_TTL_MINUTES", 15)) * time.Minute

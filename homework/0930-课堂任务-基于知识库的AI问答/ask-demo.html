@@ -34,7 +34,7 @@
   <div class="bar">
     <input id="q" value="导入环节为什么要用情境图？" />
     <button class="primary" onclick="ask()">提问</button>
-    <button onclick="askNoEvidence()">问一个本班没有依据的问题</button>
+    <button onclick="askNoEvidence()">问一个本班没有依据的问题（天气）</button>
     <button onclick="askAnonymous()">未登录提问</button>
   </div>
 
@@ -88,8 +88,8 @@ async function askWith(question) {
 }
 function ask() { askWith(document.getElementById('q').value); }
 function askNoEvidence() {
-  document.getElementById('q').value = '分数除法验算习惯怎么培养？';
-  askWith('分数除法验算习惯怎么培养？');   // 该内容只存在于 B 班材料
+  document.getElementById('q').value = '今天上海天气怎么样？';
+  askWith('今天上海天气怎么样？');   // 本班材料里没有依据，也不该由模型凭记忆作答
 }
 async function askAnonymous() {
   await fetch('/api/logout', { method: 'POST' }).catch(() => {});
