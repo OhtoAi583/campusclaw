@@ -34,6 +34,13 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 }
 
 export const api = {
+  // 通用请求助手（平台页面使用）
+  get: <T>(path: string) => request<T>(path),
+  post: <T>(path: string, body: unknown) =>
+    request<T>(path, { method: 'POST', body: JSON.stringify(body) }),
+  postForm: <T>(path: string, form: FormData) =>
+    request<T>(path, { method: 'POST', body: form }),
+
   me: () => request<Identity>('/api/me'),
 
   login: (username: string, password: string) =>

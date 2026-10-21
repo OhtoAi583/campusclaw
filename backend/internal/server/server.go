@@ -14,9 +14,11 @@ import (
 
 	"campusclaw/backend/internal/answer"
 	"campusclaw/backend/internal/auth"
+	"campusclaw/backend/internal/chat"
 	"campusclaw/backend/internal/config"
 	"campusclaw/backend/internal/httpx"
 	"campusclaw/backend/internal/materials"
+	"campusclaw/backend/internal/platform"
 	"campusclaw/backend/internal/search"
 )
 
@@ -31,6 +33,8 @@ type Deps struct {
 	Materials *materials.Handler
 	Search    *search.Service
 	Answer    *answer.Service
+	Platform  *platform.Store
+	Chat      *chat.Service
 }
 
 type server struct {
@@ -65,6 +69,19 @@ func New(deps Deps) http.Handler {
 	mux.Handle("POST /api/search", httpx.RequireAuth(http.HandlerFunc(s.search), deps.Sessions, deps.Tokens))
 	// 基于知识库的问答：先在本班检索，取得切片后才生成回答并标注出处。
 	mux.Handle("POST /api/ask", httpx.RequireAuth(http.HandlerFunc(s.ask), deps.Sessions, deps.Tokens))
+
+	// ---- AI 应用平台 ----
+	mux.Handle("GET /api/apps", httpx.RequireAuth(http.HandlerFunc(s.listApps), deps.Sessions, deps.Tokens))
+	mux.Handle("GET /api/apps/{id}", httpx.RequireAuth(http.HandlerFunc(s.getApp), deps.Sessions, deps.Tokens))
+	mux.Handle("GET /api/templates", httpx.RequireAuth(http.HandlerFunc(s.listTemplates), deps.Sessions, deps.Tokens))
+	mux.Handle("GET /api/skills", httpx.RequireAuth(http.HandlerFunc(s.listSkills), deps.Sessions, deps.Tokens))
+	mux.Handle("POST /api/skills", httpx.RequireAuth(
+		httpx.RequireRole("teacher", http.HandlerFunc(s.uploadSkill)), deps.Sessions, deps.Tokens))
+	mux.Handle("GET /api/mcp/servers", httpx.RequireAuth(http.HandlerFunc(s.listMCPServers), deps.Sessions, deps.Tokens))
+	mux.Handle("GET /api/mcp/servers/{id}/tools", httpx.RequireAuth(http.HandlerFunc(s.mcpTools), deps.Sessions, deps.Tokens))
+	mux.Handle("POST /api/chat", httpx.RequireAuth(http.HandlerFunc(s.chatHandler), deps.Sessions, deps.Tokens))
+	mux.Handle("GET /api/llm-calls", httpx.RequireAuth(http.HandlerFunc(s.listLLMCalls), deps.Sessions, deps.Tokens))
+	mux.Handle("GET /api/llm-calls/{id}", httpx.RequireAuth(http.HandlerFunc(s.getLLMCall), deps.Sessions, deps.Tokens))
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, http.StatusNotFound, "not_found")

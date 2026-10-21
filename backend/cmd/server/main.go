@@ -15,10 +15,13 @@ import (
 
 	"campusclaw/backend/internal/answer"
 	"campusclaw/backend/internal/auth"
+	"campusclaw/backend/internal/chat"
 	"campusclaw/backend/internal/config"
 	"campusclaw/backend/internal/db"
 	"campusclaw/backend/internal/kb"
+	"campusclaw/backend/internal/llm"
 	"campusclaw/backend/internal/materials"
+	"campusclaw/backend/internal/platform"
 	"campusclaw/backend/internal/search"
 	"campusclaw/backend/internal/server"
 )
@@ -70,6 +73,10 @@ func run() error {
 	if err := db.Seed(ctx, pool, cfg.Seed, hasher, cfg.UploadDir, indexer); err != nil {
 		return err
 	}
+	// AI 应用平台的内置应用 / 提示词模板 / 技能 / MCP 配置（幂等）。
+	if err := platform.SeedPlatform(ctx, pool); err != nil {
+		return err
+	}
 	// 为迭代 1 时期已入库、还没有索引块的材料补建索引。
 	if n, err := indexer.IndexMissing(ctx, pool); err != nil {
 		return err
@@ -111,8 +118,14 @@ func run() error {
 			UploadDir:      cfg.UploadDir,
 			MaxUploadBytes: cfg.MaxUploadBytes,
 		},
-		Answer: &answer.Service{Search: searchService, Chat: chatClient},
-		Search: searchService,
+		Answer:   &answer.Service{Search: searchService, Chat: chatClient},
+		Search:   searchService,
+		Platform: platform.NewStore(pool),
+		Chat: &chat.Service{
+			Platform: platform.NewStore(pool),
+			Search:   searchService,
+			LLM:      llm.New(cfg.Chat.BaseURL, cfg.Chat.APIKey, cfg.Chat.Timeout),
+		},
 	})
 
 	srv := &http.Server{

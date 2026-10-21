@@ -109,6 +109,9 @@ export default function MaterialsPage({ identity, onExpired }: Props) {
           <Link to="/search" className="ghost">
             检索
           </Link>
+          <Link to="/platform" className="ghost">
+            AI 应用
+          </Link>
           {identity.role === 'teacher' ? (
             <button type="button" className="primary" onClick={() => setUploadOpen(true)}>
               上传材料

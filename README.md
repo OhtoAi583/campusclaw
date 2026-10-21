@@ -116,6 +116,48 @@ STUDENT_A_PW=... STUDENT_B_PW=... TEACHER_PW=... \
 评测集在 `eval/retrieval-cases.json`：`hit` 用例判定命中率（阈值 80%），
 `isolation` 用例判定班级隔离——**隔离用例必须全部返回空**，出现跨班结果即判定本次交付不通过。
 
+
+## AI 应用平台（迭代 3）
+
+把「知识库 + 提示词模板 + 技能 + 外部工具」组合成可配置的 AI 应用。
+
+| 能力 | 实现 |
+| --- | --- |
+| 多个内置 AI 应用 | `教研问答` / `教案生成` / `材料摘要` / `学情分析`，各自绑定不同模板、技能与 MCP 工具 |
+| 提示词模板 | `prompt_templates` 表：system + user 模板 + `{{变量}}`，渲染后原样作为 messages 发出 |
+| 知识库检索 | 按会话班级检索切片，取 top-k；跨班内容不进入候选集 |
+| 内置 Skill + 上传 | `skills` 表；内置「引用校验 / 教研文风 / 结构化输出」，支持上传 `.md` |
+| 外部工具 / MCP | stdio + JSON-RPC 客户端；仓库自带 `bin/mcp-demo`（word_count / text_stats） |
+
+### 关键接口
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/api/apps` | 应用列表（含模板、技能、MCP 绑定） |
+| GET | `/api/templates` | 提示词模板 |
+| GET | `/api/skills` · POST `/api/skills` | 技能列表 / 上传 `.md`（教师） |
+| GET | `/api/mcp/servers` · `/api/mcp/servers/{id}/tools` | MCP 服务器 / 现场拉取工具 schema |
+| POST | `/api/chat` | 执行一次应用对话（检索 → 模板 → 技能 → 工具 → 模型） |
+| GET | `/api/llm-calls` · `/api/llm-calls/{id}` | 调用记录 / 某次调用的**完整请求体与返回体** |
+
+### 每次 LLM 调用都可回放
+
+`llm_calls` 表保存 `request_json`（实际发给 `/chat/completions` 的完整 body）、`response_json`（网关原始返回），
+以及 `kb_chunks` / `kb_chars` / `skill_chars` / `tool_rounds` / `round_index` 等计量字段。
+页面上的「本次对话发给 LLM 的原始报文」直接读取 `GET /api/llm-calls/{id}`，不含任何手工转写。
+
+```bash
+# 查看最近一次调用的完整请求 / 返回
+curl -s -b cookie.jar http://localhost:8080/api/llm-calls/1 | python3 -m json.tool
+```
+
+### 提示词模板 / 技能 / 工具如何进入请求
+
+- **模板**：渲染后的 system 与 user 文本原样放进 `messages`；
+- **技能**：启用技能的 SKILL.md **全文**追加到 system 消息末尾（总长上限 12000 字）；
+- **MCP 工具**：`tools/list` 的 schema 原样转成 OpenAI function schema，放进请求的 `tools` 字段；
+  模型返回 `tool_calls` 后由平台执行工具，把 `assistant(tool_calls)` 与 `tool(结果)` 追加进 messages 再请求一次。
+
 ## 接口一览
 
 | 方法 | 路径 | 鉴权 | 成功 | 失败 |
