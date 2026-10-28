@@ -52,7 +52,7 @@ func TestLoadRejectsWeakSeedPassword(t *testing.T) {
 func clearRequired(t *testing.T) {
 	t.Helper()
 	for _, key := range []string{
-		"SESSION_SECRET", "DB_NAME", "DB_USER", "DB_PASSWORD",
+		"SESSION_SECRET", "JWT_SECRET", "DB_NAME", "DB_USER", "DB_PASSWORD",
 		"SEED_TEACHER_A_PASSWORD", "SEED_STUDENT_A1_PASSWORD", "SEED_STUDENT_B1_PASSWORD",
 	} {
 		t.Setenv(key, "")
@@ -62,6 +62,7 @@ func clearRequired(t *testing.T) {
 func setRequired(t *testing.T) {
 	t.Helper()
 	t.Setenv("SESSION_SECRET", "unit-test-secret")
+	t.Setenv("JWT_SECRET", "unit-test-jwt-secret")
 	t.Setenv("DB_NAME", "campusclaw")
 	t.Setenv("DB_USER", "campusclaw_user")
 	t.Setenv("DB_PASSWORD", "unit-test-db-password")
