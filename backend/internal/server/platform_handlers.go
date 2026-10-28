@@ -284,16 +284,23 @@ func (s *server) getLLMCall(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-var nonSlug = regexp.MustCompile(`[^a-zA-Z0-9_-]+`)
+var (
+	nonSlug   = regexp.MustCompile(`[^a-zA-Z0-9_-]+`)
+	multiDash = regexp.MustCompile(`-{2,}`)
+)
 
 func slug(s string) string {
-	return strings.Trim(nonSlug.ReplaceAllString(strings.ToLower(s), "-"), "-")
+	out := nonSlug.ReplaceAllString(strings.ToLower(s), "-")
+	out = multiDash.ReplaceAllString(out, "-")
+	return strings.Trim(out, "-")
 }
 
 // parseSkillMeta 从 SKILL.md 里取名称与描述：
 // 优先 frontmatter 的 name/description，其次一级标题与首段。
 func parseSkillMeta(filename, body string) (string, string) {
-	name := strings.TrimSuffix(filepath.Base(filename), filepath.Ext(filename))
+	fallbackName := strings.TrimSuffix(filepath.Base(filename), filepath.Ext(filename))
+	name := fallbackName
+	named := false
 	description := ""
 	lines := strings.Split(body, "\n")
 	inFront := false
@@ -309,19 +316,28 @@ func parseSkillMeta(filename, body string) (string, string) {
 		}
 		if inFront {
 			if v, ok := strings.CutPrefix(trimmed, "name:"); ok {
-				name = strings.Trim(strings.TrimSpace(v), `"'`)
+				if candidate := strings.Trim(strings.TrimSpace(v), `"'`); candidate != "" {
+					name = candidate
+					named = true
+				}
 			}
 			if v, ok := strings.CutPrefix(trimmed, "description:"); ok {
 				description = strings.Trim(strings.TrimSpace(v), `"'`)
 			}
 			continue
 		}
-		if strings.HasPrefix(trimmed, "# ") && name == "" {
-			name = strings.TrimSpace(strings.TrimPrefix(trimmed, "# "))
+		if !named && strings.HasPrefix(trimmed, "# ") {
+			if candidate := strings.TrimSpace(strings.TrimPrefix(trimmed, "# ")); candidate != "" {
+				name = candidate
+				named = true
+			}
 		}
 		if description == "" && trimmed != "" && !strings.HasPrefix(trimmed, "#") && !strings.HasPrefix(trimmed, "---") {
 			description = trimmed
 		}
+	}
+	if !named {
+		name = fallbackName
 	}
 	if description == "" {
 		description = "用户上传的技能"

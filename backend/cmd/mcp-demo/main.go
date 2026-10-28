@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"unicode/utf8"
+	"unicode"
 )
 
 type request struct {
@@ -81,9 +81,10 @@ func main() {
 			}
 			_ = json.Unmarshal(req.Params, &p)
 			text, _ := p.Arguments["text"].(string)
+			out, isErr := run(p.Name, text)
 			_ = enc.Encode(response{JSONRPC: "2.0", ID: id, Result: map[string]any{
-				"content": []map[string]any{{"type": "text", "text": run(p.Name, text)}},
-				"isError": false,
+				"content": []map[string]any{{"type": "text", "text": out}},
+				"isError": isErr,
 			}})
 		default:
 			_ = enc.Encode(response{JSONRPC: "2.0", ID: id, Error: map[string]any{
@@ -93,8 +94,14 @@ func main() {
 	}
 }
 
-func run(name, text string) string {
-	chars := utf8.RuneCountInString(strings.TrimSpace(text))
+func run(name, text string) (string, bool) {
+	// 字数只统计非空白字符，避免把换行与缩进算进去。
+	chars := 0
+	for _, r := range text {
+		if !unicode.IsSpace(r) {
+			chars++
+		}
+	}
 	switch name {
 	case "word_count":
 		paragraphs := 0
@@ -103,7 +110,7 @@ func run(name, text string) string {
 				paragraphs++
 			}
 		}
-		return fmt.Sprintf("字数：%d；非空段落：%d", chars, paragraphs)
+		return fmt.Sprintf("字数：%d；非空段落：%d", chars, paragraphs), false
 	case "text_stats":
 		sentences := 0
 		for _, r := range text {
@@ -118,7 +125,7 @@ func run(name, text string) string {
 		if sentences > 0 {
 			avg = chars / sentences
 		}
-		return fmt.Sprintf("字数：%d；句数：%d；平均句长：%d 字", chars, sentences, avg)
+		return fmt.Sprintf("字数：%d；句数：%d；平均句长：%d 字", chars, sentences, avg), false
 	}
-	return "未知工具"
+	return "未知工具", true
 }

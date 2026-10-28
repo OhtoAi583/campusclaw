@@ -220,9 +220,21 @@ nginx -c "$PWD/deploy/nginx.local.conf" -p "$PWD/"
 ## 测试
 
 ```bash
-cd backend && go test ./...        # 单元测试：配置校验、限流、口令哈希、上传校验
+cd backend && go test ./...        # 单元测试（见下表）
 cd frontend && npm run build       # TypeScript 类型检查 + 构建
 ```
+
+| 包 | 覆盖内容 |
+| --- | --- |
+| `internal/auth` | 口令哈希与统一错误、登录限流与锁定期 |
+| `internal/config` | 必填项缺失、非法配置、默认值 |
+| `internal/kb` | 分块覆盖全文（含标题密集的回归用例）、嵌入确定性、向量编解码 |
+| `internal/materials` | 扩展名白名单、路径穿越、标题提取 |
+| `internal/llm` | 请求体字段、tools 原样发送、原始请求/响应字节、网关错误 |
+| `internal/mcp` | 对真实 MCP 演示服务器完成 initialize → tools/list → tools/call |
+| `internal/chat` | 模板渲染、检索上下文与出处编号、参数切分 |
+| `internal/answer` | 提示词只带证据、摘录式回答带 `[n]`、无依据文案 |
+| `internal/server` | SKILL.md 元信息解析（frontmatter / 标题 / 文件名回退）、id 规整 |
 
 ## 安全说明
 

@@ -73,7 +73,7 @@
 - [x] 9.1 `openspec validate add-class-scoped-retrieval --strict` 通过 — verify: 退出码 0 且无 error
 - [ ] 9.2 按 README 从零启动后检索可用（含种子数据已建索引） — verify: 全新 `down -v` 后 `up --build -d`，登录后检索命中种子材料
 - [x] 9.3 打版本 tag（建议 `v0.2.0-retrieval`） — verify: `git tag` 列出该 tag
-- [ ] 9.4 归档：活动变更清零、`changes/archive/` 出现带日期目录、`openspec/specs/kb-retrieval/spec.md` 生成 — verify: `openspec list` 无本 change，`openspec list --specs` 出现 `kb-retrieval`
+- [x] 9.4 归档：活动变更清零、`changes/archive/` 出现带日期目录、`openspec/specs/kb-retrieval/spec.md` 生成 — verify: `openspec list` 无本 change，`openspec list --specs` 出现 `kb-retrieval`
 
 ## 实现与验证说明
 
@@ -92,5 +92,12 @@
 - **9.2** 的 verify 写的是 Docker Compose 全新启动（`down -v` → `up --build -d`）。
   本条已在本机裸机环境用等价步骤验证（清空数据 → 重启 → 种子与索引自动重建 → 检索命中），
   但未在 Docker 环境复跑（本机无法访问镜像仓库），因此保持未勾选。
-- **9.4 归档**：留待本迭代验收确认后再执行 `openspec archive add-class-scoped-retrieval`，
-  归档后 delta 才会并入 `openspec/specs/kb-retrieval/spec.md`。
+- **9.4 归档**：已于 2026-10-28 执行，delta 并入 `openspec/specs/kb-retrieval/spec.md`（见文末归档执行记录）。
+
+## 归档执行记录
+
+- 2026-10-28 执行 `openspec archive add-class-scoped-retrieval --yes`：
+  delta 的 10 条 Requirement 已并入 `openspec/specs/kb-retrieval/spec.md`，
+  本 change 移入 `openspec/changes/archive/2026-10-28-add-class-scoped-retrieval/`，活动变更清零。
+- 唯一未勾选项 **9.2**（Docker Compose 全新启动验证）：实现层面已用本机裸机等价步骤验证
+  （清空数据 → 重启 → 种子与索引自动重建 → 检索命中），但本机无法访问镜像仓库，Compose 路径未实测。
